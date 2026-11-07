@@ -1,0 +1,89 @@
+# Reelforge — single-service stack.
+#
+#   cp .env.example .env          # optional: every value has a working default
+#   docker compose up -d
+#   docker compose logs reelforge | grep rg_     # the seeded API key
+#
+# Then open http://127.0.0.1:4400/app/ and paste the key.
+#
+# Everything the app writes (SQLite database, videos, screenshots, TTS clips,
+# the encryption keyfile) lives in the `reelforge-data` volume at /data.
+name: reelforge
+
+services:
+  reelforge:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # Image reference must be lowercase (Docker rejects uppercase repository
+    # names). Replace `your-github-user` when the project is published, or just
+    # use `docker compose up -d --build` and let compose tag the local build.
+    image: ghcr.io/your-github-user/reelforge:latest
+    container_name: reelforge
+    init: true
+    restart: unless-stopped
+    ports:
+      - "4400:4400"
+    volumes:
+      - reelforge-data:/data
+    # Optional: copy .env.example to .env to override planner/narration/ports.
+    # `required: false` needs Docker Compose >= 2.24 (Docker Desktop 4.30+).
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # The API binds 127.0.0.1 by default (right for bare metal, useless in a
+      # container) — this is the one setting the image must override.
+      REELFORGE_HOST: "0.0.0.0"
+      REELFORGE_DATA_DIR: /data
+      # Public origin used in signed video URLs and guide snippets. Set this to
+      # your HTTPS hostname when you put Reelforge behind a reverse proxy.
+      # REELFORGE_PUBLIC_URL: "https://reelforge.example.com"
+    # Seed is idempotent: it creates the workspace + an API key on first boot
+    # and prints the same key afterwards. Remove the seed half if you manage
+    # keys yourself (docker compose exec reelforge node scripts/seed.ts).
+    command:
+      - sh
+      - -c
+      - node scripts/seed.ts && exec node packages/api/src/server.ts
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:4400/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  # Explicit name so it does not get the compose project prefix: backup and
+  # restore commands in docs/DEPLOY.md address `reelforge-data` directly.
+  reelforge-data:
+    name: reelforge-data
+
+# ---------------------------------------------------------------------------
+# Fully local, fully private (BYOK) setup: run Ollama next to Reelforge and
+# point the planner at it. Uncomment, then in .env set:
+#
+#   REELFORGE_LLM_PROVIDER=ollama
+#   REELFORGE_LLM_BASE_URL=http://ollama:11434/v1
+#   REELFORGE_LLM_API_KEY=ollama            # Ollama ignores the value but the
+#                                           # OpenAI client wants one present
+#   REELFORGE_LLM_MODEL=qwen2.5:7b-instruct
+#
+# Then: docker compose exec ollama ollama pull qwen2.5:7b-instruct
+#
+#   ollama:
+#     image: ollama/ollama:latest
+#     container_name: reelforge-ollama
+#     restart: unless-stopped
+#     volumes:
+#       - ollama-models:/root/.ollama
+#     # No ports: only Reelforge needs to reach it, over the compose network.
+#     environment:
+#       OLLAMA_KEEP_ALIVE: "10m"
+#
+# volumes:
+#   ollama-models:

@@ -1,0 +1,46 @@
+# Normalise line endings in the repository, not in the working tree.
+#
+# Everyone gets LF in the checkout on every OS (the TS/Vite/esbuild toolchain
+# and the CI runner all expect it), while media and Windows-native scripts keep
+# whatever bytes they were authored with.
+* text=auto eol=lf
+
+# --- source & config: always LF --------------------------------------------
+*.{ts,tsx,js,mjs,cjs,json,jsonc,md,mdx,css,html,yml,yaml,toml,sh,sql} text eol=lf
+Dockerfile text eol=lf
+.dockerignore text eol=lf
+.editorconfig text eol=lf
+.gitattributes text eol=lf
+.gitignore text eol=lf
+LICENSE text eol=lf
+.nvmrc text eol=lf
+
+# --- Windows-native scripts -------------------------------------------------
+*.ps1 text eol=crlf
+*.psm1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# --- binary: never diff, never convert --------------------------------------
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.pdf binary
+*.mp4 binary
+*.mov binary
+*.webm binary
+*.mp3 binary
+*.wav binary
+*.m4a binary
+*.zip binary
+*.gz binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+
+# --- repo housekeeping ------------------------------------------------------
+package-lock.json -diff linguist-generated=true

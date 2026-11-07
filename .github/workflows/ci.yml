@@ -1,0 +1,135 @@
+name: CI
+
+# Everything that must be true before a PR lands:
+#   typecheck → dashboard build → guide build → render self-test → full smoke test
+# on the two Node lines the project supports (22 = .nvmrc, 24 = next LTS).
+#
+# The smoke test is deterministic offline: no model, no cloud TTS, no network
+# beyond the bundled demo product. That is why CI sets
+# REELFORGE_LLM_PROVIDER=none and REELFORGE_TTS_PROVIDER=none — it must not pass
+# because of a personal API key in a runner's environment.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # `playwright`'s postinstall downloads Chromium/Firefox/WebKit by default.
+  # We only need Chromium, and only in this job, so install it explicitly below.
+  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+  REELFORGE_TTS_PROVIDER: none
+  REELFORGE_LLM_PROVIDER: none
+  REELFORGE_ENFORCE_CREDITS: "false"
+  REELFORGE_LOG_LEVEL: warn
+  CI: "true"
+
+jobs:
+  test:
+    name: node ${{ matrix.node }} · typecheck + smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node ${{ matrix.node }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The root tsconfig covers core/agent/render/api/cli/scripts; the dashboard
+      # and the agent each have their own tsconfig (react-jsx / DOM libs).
+      - name: Typecheck
+        run: |
+          npm run typecheck
+          node node_modules/typescript/bin/tsc -p packages/web/tsconfig.json --noEmit
+          node node_modules/typescript/bin/tsc -p packages/agent/tsconfig.json --noEmit
+
+      - name: Build dashboard
+        run: npx vite build --config packages/web/vite.config.ts
+
+      - name: Build guide widget
+        run: node packages/guide/build.mjs
+
+      # Pure ffmpeg path: synthetic webm + 4 steps → MP4 + captions + poster.
+      # No browser, no display, no API key.
+      - name: Render self-test
+        run: node packages/render/test/render-selftest.ts
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Seed workspace and API key
+        run: npm run seed
+
+      # Records a real 11-step demo, renders it, then asserts the Product Graph,
+      # article and guide were produced. Needs a few minutes; that is the point.
+      - name: Smoke test
+        run: npm run smoke
+
+      - name: Upload smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-artifacts-node${{ matrix.node }}
+          path: |
+            data/videos/**/*.mp4
+            data/videos/**/*.srt
+          if-no-files-found: ignore
+          retention-days: 7
+
+  docker:
+    name: docker build
+    # PRs get fast feedback from `test`; the image itself is built here on main
+    # so a broken Dockerfile cannot sit unnoticed until a release tag.
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          load: true
+          tags: reelforge:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke the image
+        run: |
+          docker run -d --name reelforge-ci -p 4420:4400 \
+            -e REELFORGE_TTS_PROVIDER=none reelforge:ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4420/api/health > /tmp/health.json; then break; fi
+            sleep 2
+          done
+          cat /tmp/health.json
+          curl -fsS -o /dev/null http://127.0.0.1:4420/app/
+          node -e "const h=require('/tmp/health.json'); if(!h.data?.features?.includes('guides')) process.exit(1)"
+          docker logs reelforge-ci
+          docker rm -f reelforge-ci

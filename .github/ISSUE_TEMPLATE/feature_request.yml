@@ -1,0 +1,67 @@
+name: Feature request
+description: Suggest a capability — for the recorder, the API, the renderer or the deployment story.
+title: "[feat]: "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Reelforge is deliberately small: `node` + SQLite + Playwright + ffmpeg,
+        no queue broker, no native build step. Proposals that keep that property
+        are much more likely to be merged. Check
+        [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md) and
+        [docs/CONTRIBUTING-DEV.md](../docs/CONTRIBUTING-DEV.md) first.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the workflow that hurts today, not the API shape you want.
+      placeholder: |
+        When I record a flow behind a sign-in, the run fails because ...
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Which package(s) would this live in? Does it change the documented REST/MCP contract?
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Agent / planner
+        - Renderer / narration
+        - REST API or MCP
+        - Dashboard
+        - In-app guide
+        - Product Graph / articles
+        - CLI
+        - Docker, CI, deployment
+        - Docs
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Including "do nothing" — is this a real recurring problem or a one-off?
+    validations:
+      required: false
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Self-hosted constraints
+      options:
+        - label: This works with no API keys configured (offline scripted planner / silent video).
+        - label: This does not require a queue broker, native build step or cloud service.
+        - label: I am willing to open a PR for this.
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Screenshots, links, prior art (including how Screenforge Director does it).
+    validations:
+      required: false

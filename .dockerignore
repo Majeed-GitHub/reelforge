@@ -1,0 +1,49 @@
+# Keep the build context tiny and never bake local state or secrets into an image.
+#
+# Everything below is either rebuilt inside the Dockerfile (web/guide bundles),
+# installed by `npm ci`, or is per-machine runtime state that belongs in /data.
+
+# --- dependencies -----------------------------------------------------------
+node_modules
+**/node_modules
+npm-debug.log*
+
+# --- build output (rebuilt in the image) ------------------------------------
+packages/web/dist
+packages/guide/dist
+dist
+**/dist
+
+# --- runtime state: database, videos, screenshots, TTS clips, the keyfile ---
+data
+temp
+*.webm
+*.mp4
+*.mov
+*.wav
+*.mp3
+
+# --- test artifacts ---------------------------------------------------------
+coverage
+test-results
+playwright-report
+**/test/artifacts
+**/*.snap
+
+# --- secrets and machine-local config --------------------------------------
+.env
+.env.*
+!.env.example
+
+# --- vcs / editor / os ------------------------------------------------------
+.git
+.gitignore
+.github
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+
+# --- logs -------------------------------------------------------------------
+*.log
+logs
