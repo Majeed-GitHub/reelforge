@@ -454,7 +454,7 @@ export const LLM_PROVIDERS: LlmProvider[] = [
 ];
 
 /** Speech synthesis providers, in the order 'auto' tries them. */
-export const TTS_PROVIDER_IDS = ['openai', 'elevenlabs', 'edge', 'sapi', 'none'] as const;
+export const TTS_PROVIDER_IDS = ['openai', 'elevenlabs', 'edge', 'macos', 'linux', 'sapi', 'none'] as const;
 export type TtsProviderId = (typeof TTS_PROVIDER_IDS)[number];
 
 export type TtsProvider = {

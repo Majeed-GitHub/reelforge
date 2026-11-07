@@ -13,6 +13,8 @@ import type {
   DemoRow,
   EnvironmentRow,
   RenderInput,
+  MusicOptions,
+  AspectRatio,
   RenderOptions,
   RenderResult,
   StepRecord
@@ -128,6 +130,25 @@ function resolveRenderOptions(demo: DemoRow, capture: CaptureResult): RenderOpti
     return Math.min(Math.max(value, min), max);
   };
   const zoomRaw = typeof options.zoom === 'number' ? options.zoom : presetConfig.zoom;
+
+  // v0.3 render options. Kept deliberately literal rather than spread from the
+  // request so a malformed value can never reach ffmpeg.
+  const ASPECTS = ['16:9', '9:16', '1:1', '4:5'] as const;
+  const aspectRaw = typeof options.aspect === 'string' ? options.aspect : presetConfig.aspect;
+  const aspect = (ASPECTS as readonly string[]).includes(String(aspectRaw))
+    ? (aspectRaw as AspectRatio)
+    : '16:9';
+
+  const musicRaw = (options.music ?? presetConfig.music) as Record<string, unknown> | undefined;
+  const resolvedMusic: MusicOptions | undefined =
+    musicRaw && typeof musicRaw === 'object' && typeof musicRaw.path === 'string' && musicRaw.path.trim() !== ''
+      ? {
+          path: musicRaw.path,
+          gain: typeof musicRaw.gain === 'number' ? Math.min(Math.max(musicRaw.gain, 0), 1) : undefined,
+          duck: typeof musicRaw.duck === 'boolean' ? musicRaw.duck : undefined
+        }
+      : undefined;
+
   return {
     fps: pickNumber(options.fps, presetConfig.fps, 1, 60, 30),
     scaleHeight: pickNumber(options.scaleHeight, presetConfig.scaleHeight, 120, 2160, capture.viewport?.height ?? 720),
@@ -135,7 +156,13 @@ function resolveRenderOptions(demo: DemoRow, capture: CaptureResult): RenderOpti
     language: (typeof options.language === 'string' ? options.language : (presetConfig.language as string)) || 'en',
     voice: typeof options.voice === 'string' ? options.voice : (presetConfig.voice as string | undefined),
     watermarkText: 'Reelforge',
-    zoom: Math.min(Math.max(typeof zoomRaw === 'number' ? zoomRaw : 1.6, 1), 2.5)
+    zoom: Math.min(Math.max(typeof zoomRaw === 'number' ? zoomRaw : 1.6, 1), 2.5),
+    aspect,
+    music: resolvedMusic,
+    // The agent masks sensitive fields in its screenshots and hands us the boxes
+    // (scoped to a step) so the video can blur the same regions while they are
+    // actually on screen.
+    redactions: capture.redactions ?? []
   };
 }
 
