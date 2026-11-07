@@ -12,6 +12,8 @@ An open-source, self-hosted alternative to commercial demo agents ([Screenforge 
 [![Docker](https://img.shields.io/badge/docker-ghcr.io-79a7ff.svg)](docs/DEPLOY.md)
 [![MCP](https://img.shields.io/badge/MCP-39%2B%20tools-8b5cf6.svg)](docs/MCP.md)
 
+**Website:** [majeed-github.github.io/reelforge](https://majeed-github.github.io/reelforge/) · **Promo:** [16:9](docs/media/reelforge-promo.mp4) · **Social:** [9:16 story](docs/media/reelforge-story-9x16.mp4) · [1:1 post](docs/media/reelforge-post-1x1.mp4) · [4:5 feed](docs/media/reelforge-feed-4x5.mp4) · **Report:** [PROJECT-REPORT.md](docs/PROJECT-REPORT.md)
+
 ![A demo recorded and rendered by Reelforge](docs/images/demo-poster.png)
 
 ---
@@ -217,6 +219,7 @@ any recorder).
 | [FEATURES.md](docs/FEATURES.md) | Every feature, what paid tools charge for it, and why some are missing |
 | [ROADMAP.md](docs/ROADMAP.md) | An honest audit of what is still missing, and the order to do it |
 | [EMBED.md](docs/EMBED.md) | Embedding a demo in your own site, player params, analytics, privacy |
+| [PRIVACY-MODEL.md](docs/PRIVACY-MODEL.md) | What a recording can and cannot see, and the limits |
 | [site/](site) | The marketing site (GitHub Pages, no build step) and the promo composition |
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | What was reverse-engineered, and how it is built |
 | [VERIFICATION-V03.md](docs/VERIFICATION-V03.md) | v0.3 evidence: aspect ratios, ducking, redaction pixels, walkthrough |
