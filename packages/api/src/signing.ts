@@ -69,10 +69,54 @@ export function mediaUrl(storedPath: string | null | undefined): string | null {
   return `${PUBLIC_BASE_URL}/api/files/${signFileToken(abs)}`;
 }
 
+/**
+ * Public share links.
+ *
+ * A share link has to outlive the 1-hour media token by a lot (the whole point
+ * is pasting it into a DM), so it is a separate HMAC claim: `{ demoId, expiry }`
+ * with the same local secret, 30-day TTL, and no API key. The page it resolves
+ * to mints fresh 1-hour media URLs every time it is rendered, so the share link
+ * itself is the only long-lived capability.
+ */
+export const SHARE_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+type ShareClaims = { d: string; e: number };
+
+/** demo id -> opaque share token (HMAC-signed, 30-day expiry). */
+export function signShareToken(demoId: string, ttlMs: number = SHARE_TOKEN_TTL_MS): string {
+  const claims: ShareClaims = { d: demoId, e: Date.now() + ttlMs };
+  const payload = b64url(JSON.stringify(claims));
+  return `${payload}.${hmac(payload)}`;
+}
+
+export type VerifiedShareToken = { demoId: string; expiresAt: number };
+
+export function verifyShareToken(token: string): VerifiedShareToken | null {
+  const value = String(token ?? '');
+  const dot = value.lastIndexOf('.');
+  if (dot <= 0) return null;
+  const payload = value.slice(0, dot);
+  const signature = value.slice(dot + 1);
+  const expected = hmac(payload);
+  if (signature.length !== expected.length) return null;
+  if (!crypto.timingSafeEqual(Buffer.from(signature, 'utf8'), Buffer.from(expected, 'utf8'))) return null;
+  let claims: ShareClaims;
+  try {
+    claims = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as ShareClaims;
+  } catch {
+    return null;
+  }
+  if (!claims || typeof claims.d !== 'string' || !claims.d) return null;
+  if (typeof claims.e !== 'number') return null;
+  if (Date.now() > claims.e) return null;
+  return { demoId: claims.d, expiresAt: claims.e };
+}
+
 export const MIME_BY_EXT: Record<string, string> = {
   '.mp4': 'video/mp4',
   '.webm': 'video/webm',
   '.png': 'image/png',
+  '.gif': 'image/gif',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
   '.webp': 'image/webp',

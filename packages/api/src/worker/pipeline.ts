@@ -21,6 +21,7 @@ import { one, run, many } from '../dbq.ts';
 import { loadDemoRequest } from '../demoio.ts';
 import { upsertProductGraph } from '../graph.ts';
 import { loadSignIn } from '../services/environments.ts';
+import { notifyDemoEvent } from '../services/webhooks.ts';
 import { safeJson } from '../util.ts';
 
 /**
@@ -64,12 +65,15 @@ function stillRunning(demoId: string): boolean {
 }
 
 function failDemo(demoId: string, failure: DemoFailure): void {
-  run(
+  const changed = run(
     "UPDATE demos SET status = 'failed', failure_json = ?, progress = 1, finished_at = ? WHERE id = ? AND status = 'running'",
     JSON.stringify(failure),
     nowIso(),
     demoId
   );
+  // Notify out-of-process consumers; fire-and-forget so a dead webhook can
+  // never fail (or delay) the demo itself. Covers every failure path below.
+  if (changed > 0) void notifyDemoEvent(demoId, 'demo.failed');
 }
 
 function cancelled(demoId: string): void {
@@ -339,6 +343,10 @@ export async function runDemo(demoId: string, signal: AbortSignal): Promise<void
           );
         }
       }
+
+      // Last: the webhook payload can now carry the flow/article/guide that the
+      // completion just produced. Same fire-and-forget rule as the failure path.
+      void notifyDemoEvent(demoId, 'demo.complete');
     }
   } catch (error) {
     if (signal.aborted) {
