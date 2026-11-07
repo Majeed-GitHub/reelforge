@@ -1,0 +1,19 @@
+{
+  "name": "reelforge",
+  "version": "0.3.0",
+  "description": "Record narrated product demos, then publish help-centre articles and in-app guides from the same recording. Talks to a local Reelforge MCP server over streamable HTTP.",
+  "author": {
+    "name": "Shaik Majeed"
+  },
+  "license": "MIT",
+  "keywords": ["demos", "mcp", "documentation", "screenshots", "walkthroughs"],
+  "mcpServers": {
+    "reelforge": {
+      "type": "http",
+      "url": "http://127.0.0.1:4400/api/mcp",
+      "headers": {
+        "X-API-Key": "${REELFORGE_API_KEY}"
+      }
+    }
+  }
+}

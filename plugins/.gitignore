@@ -1,0 +1,6 @@
+# Never commit API keys or per-machine environment files.
+.env
+.env.local
+*.local.env
+**/.env
+**/.env.local
