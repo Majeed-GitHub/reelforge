@@ -31,6 +31,9 @@ import {
   findTtsProvider,
   type LlmProvider,
   type LlmProviderId,
+  type LlmTier,
+  type ProviderAuthStyle,
+  type ProviderProtocol,
   type TtsProvider,
   type TtsProviderId
 } from '../../core/src/providers.ts';
@@ -43,7 +46,15 @@ export {
   findLlmProvider,
   findTtsProvider
 };
-export type { LlmProvider, LlmProviderId, TtsProvider, TtsProviderId };
+export type {
+  LlmProvider,
+  LlmProviderId,
+  LlmTier,
+  ProviderAuthStyle,
+  ProviderProtocol,
+  TtsProvider,
+  TtsProviderId
+};
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -63,7 +74,9 @@ export const PROVIDER_ENV = {
   ttsVoice: 'REELFORGE_TTS_VOICE',
   ttsModel: 'REELFORGE_TTS_MODEL',
   /** Optional explicit workspace for headless/worker processes. */
-  workspaceId: 'REELFORGE_WORKSPACE_ID'
+  workspaceId: 'REELFORGE_WORKSPACE_ID',
+  /** `off` disables the best-effort local Ollama/LM Studio probe. */
+  localProbe: 'REELFORGE_LLM_LOCAL_PROBE'
 } as const;
 
 /** Keys written under `workspace_settings`. */
@@ -90,6 +103,10 @@ const LEGACY_DEFAULT_MODEL = 'gpt-4.1-mini';
 
 const MODELS_TIMEOUT_MS = 8_000;
 const TEST_TIMEOUT_MS = 12_000;
+
+/** Local auto-detect: cheap /models probe, cached for a minute. */
+const LOCAL_PROBE_TIMEOUT_MS = 450;
+const LOCAL_PROBE_TTL_MS = 60_000;
 
 /** Narration endpoints are not in the core catalog (no key/base URL there). */
 const TTS_BASE_URLS: Record<string, string> = {
@@ -341,6 +358,125 @@ function ttsEnvKey(provider: TtsProvider, env: EnvBag): { name: string; value: s
 }
 
 // ---------------------------------------------------------------------------
+// Local provider auto-detect (best-effort, short timeout, cached)
+// ---------------------------------------------------------------------------
+
+export type LocalProviderProbe = {
+  providerId: string;
+  label: string;
+  baseUrl: string;
+  models: string[];
+  latencyMs: number;
+};
+
+export type LocalProbeOptions = {
+  env?: EnvBag;
+  /** Override the probe list (tests); defaults to the catalog's local presets. */
+  targets?: Array<{ providerId: string; baseUrl: string }>;
+  timeoutMs?: number;
+  force?: boolean;
+  fetchImpl?: typeof fetch;
+};
+
+type LocalProbeCache = { at: number; found: LocalProviderProbe | null };
+
+let localProbeCache: LocalProbeCache | null = null;
+
+function localProbeDisabled(env: EnvBag): boolean {
+  const value = envValue(env, PROVIDER_ENV.localProbe).toLowerCase();
+  return value === 'off' || value === 'false' || value === '0' || value === 'none';
+}
+
+/** Catalog-order local presets that can be probed without a key. */
+export function localProviderTargets(env: EnvBag = process.env): Array<{ providerId: string; baseUrl: string }> {
+  return LLM_PROVIDERS.filter(
+    (provider) => provider.tier === 'local' && !provider.requiresKey && /^https?:\/\//.test(provider.baseUrl)
+  ).map((provider) => ({ providerId: provider.id, baseUrl: stripTrailingSlash(provider.baseUrl) }));
+}
+
+/** Clear the probe cache (tests, or when the user asks to re-scan). */
+export function resetLocalProbeCache(): void {
+  localProbeCache = null;
+}
+
+/**
+ * The last successful local probe, when it is still fresh. `resolveLlm()` is
+ * synchronous, so it can only consume this cache; the async API status route
+ * (`providerStatusWithDetection`) refreshes it before rendering.
+ */
+export function cachedLocalProvider(env: EnvBag = process.env): LocalProviderProbe | null {
+  if (localProbeDisabled(env)) return null;
+  if (!localProbeCache) return null;
+  if (Date.now() - localProbeCache.at > LOCAL_PROBE_TTL_MS) return null;
+  return localProbeCache.found;
+}
+
+async function probeLocalTarget(
+  target: { providerId: string; baseUrl: string },
+  timeoutMs: number,
+  fetchImpl: typeof fetch
+): Promise<LocalProviderProbe | null> {
+  const provider = findLlmProvider(target.providerId);
+  const baseUrl = stripTrailingSlash(target.baseUrl || provider?.baseUrl || '');
+  if (!baseUrl) return null;
+  const started = Date.now();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetchImpl(`${baseUrl}/models`, {
+      method: 'GET',
+      headers: { accept: 'application/json' },
+      signal: controller.signal
+    });
+    const text = await response.text().catch(() => '');
+    if (!response.ok) return null;
+    let models: string[] = [];
+    try {
+      models = parseModelIds(text ? (JSON.parse(text) as unknown) : null);
+    } catch {
+      models = [];
+    }
+    return {
+      providerId: target.providerId,
+      label: provider?.label ?? target.providerId,
+      baseUrl,
+      models,
+      latencyMs: Date.now() - started
+    };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Probe the catalog's local presets (Ollama, LM Studio, llama.cpp, vLLM,
+ * LocalAI) and remember the first one that answers `/models`. Never throws.
+ * Results are cached for `LOCAL_PROBE_TTL_MS`; pass `force` to re-scan.
+ * Set `REELFORGE_LLM_LOCAL_PROBE=off` to disable.
+ */
+export async function detectLocalProviders(options: LocalProbeOptions = {}): Promise<LocalProviderProbe | null> {
+  const env = options.env ?? process.env;
+  if (localProbeDisabled(env)) {
+    localProbeCache = { at: Date.now(), found: null };
+    return null;
+  }
+  if (!options.force && localProbeCache && Date.now() - localProbeCache.at <= LOCAL_PROBE_TTL_MS) {
+    return localProbeCache.found;
+  }
+
+  const targets = options.targets ?? localProviderTargets(env);
+  const timeoutMs = options.timeoutMs ?? LOCAL_PROBE_TIMEOUT_MS;
+  const fetchImpl = options.fetchImpl ?? fetch;
+  // Probe in parallel so a cold status page costs one timeout, not one per port.
+  const results = await Promise.all(targets.map((target) => probeLocalTarget(target, timeoutMs, fetchImpl)));
+  const found = results.find((result): result is LocalProviderProbe => result !== null) ?? null;
+  localProbeCache = { at: Date.now(), found };
+  return found;
+}
+
+// ---------------------------------------------------------------------------
 // LLM resolution
 // ---------------------------------------------------------------------------
 
@@ -351,6 +487,11 @@ export type ResolvedLlm = {
   apiKey: string;
   model: string;
   source: ProviderSource;
+  /**
+   * True when nobody named a provider: it was auto-selected from a key found in
+   * the environment, or from a local server answering /models.
+   */
+  detected: boolean;
 };
 
 export type ResolveOptions = {
@@ -368,7 +509,8 @@ const NONE_LLM: ResolvedLlm = {
   baseUrl: '',
   apiKey: '',
   model: '',
-  source: 'none'
+  source: 'none',
+  detected: false
 };
 
 function customProvider(label: string, baseUrl: string): LlmProvider {
@@ -378,7 +520,9 @@ function customProvider(label: string, baseUrl: string): LlmProvider {
     baseUrl,
     requiresKey: false,
     keyEnv: [SHARED_LLM_KEY_ENV],
-    defaultModel: ''
+    defaultModel: '',
+    tier: 'local',
+    userSuppliedBaseUrl: true
   };
 }
 
@@ -403,28 +547,33 @@ function resolveLlmFromEnv(env: EnvBag, reader: WorkspaceSettingsReader, workspa
   const envModel = envValue(env, PROVIDER_ENV.llmModel);
 
   let provider: LlmProvider | null = null;
-  let autoSelected = false;
+  /** 0.1 compatibility: a bare base URL means the legacy custom gateway. */
+  let legacyAuto = false;
+  let detected = false;
 
   if (rawProvider && rawProvider !== 'auto') {
     // Explicit provider (unknown ids behave like a custom gateway).
     provider = findLlmProvider(rawProvider) ?? customProvider(`Custom (${rawProvider})`, '');
   } else if (envBaseUrl) {
-    // 0.1 compatibility: REELFORGE_LLM_BASE_URL alone selects a custom gateway.
     provider = customProvider('Custom (OpenAI-compatible)', envBaseUrl);
-    autoSelected = true;
+    legacyAuto = true;
+    detected = true;
   } else {
-    // Auto-detect: first provider-specific key wins, then the legacy shared key
-    // mapped to OpenAI (which is what 0.1's config.LLM did).
+    // Auto-detect in catalog order (the documented priority): the first
+    // provider-specific key present wins. Providers that need a user-supplied
+    // URL (Azure, custom gateways) are skipped - guessing them cannot work.
     for (const candidate of LLM_PROVIDERS) {
-      if (candidate.id === 'custom') continue;
+      if (candidate.id === 'custom' || candidate.userSuppliedBaseUrl) continue;
       if (providerSpecificEnvKey(candidate, env)) {
         provider = candidate;
         break;
       }
     }
+    // The legacy shared key maps to OpenAI, exactly like 0.1's config.LLM.
     if (!provider && envValue(env, SHARED_LLM_KEY_ENV)) {
       provider = findLlmProvider('openai') ?? null;
     }
+    detected = provider !== null;
   }
 
   if (!provider) return null;
@@ -438,9 +587,9 @@ function resolveLlmFromEnv(env: EnvBag, reader: WorkspaceSettingsReader, workspa
   if (apiKey) {
     source = 'env';
   } else if (!provider.requiresKey) {
-    // A keyless local endpoint is only usable when it was selected explicitly;
-    // a bare REELFORGE_LLM_BASE_URL never enabled the planner in 0.1.
-    if (autoSelected) return null;
+    // A keyless gateway is only usable when it was selected explicitly; a bare
+    // REELFORGE_LLM_BASE_URL never enabled the planner in 0.1.
+    if (legacyAuto) return null;
     source = 'env';
   } else {
     // Env chose the provider but the key lives in the dashboard: allow that mix.
@@ -456,8 +605,8 @@ function resolveLlmFromEnv(env: EnvBag, reader: WorkspaceSettingsReader, workspa
 
   if (source === 'none') return null;
 
-  const model = envModel || provider.defaultModel || (autoSelected ? LEGACY_DEFAULT_MODEL : '');
-  return { providerId: provider.id, label: provider.label, baseUrl, apiKey, model, source };
+  const model = envModel || provider.defaultModel || (legacyAuto ? LEGACY_DEFAULT_MODEL : '');
+  return { providerId: provider.id, label: provider.label, baseUrl, apiKey, model, source, detected };
 }
 
 function resolveLlmFromWorkspace(store: WorkspaceLlmStore): ResolvedLlm | null {
@@ -474,7 +623,8 @@ function resolveLlmFromWorkspace(store: WorkspaceLlmStore): ResolvedLlm | null {
     baseUrl,
     apiKey: store.apiKey ?? '',
     model: store.model || provider?.defaultModel || '',
-    source: 'workspace'
+    source: 'workspace',
+    detected: false
   };
 }
 
@@ -502,6 +652,24 @@ export function resolveLlm(options: ResolveOptions = {}): ResolvedLlm {
     if ((store.providerId ?? '').toLowerCase() === 'none') return NONE_LLM;
     const fromWorkspace = resolveLlmFromWorkspace(store);
     if (fromWorkspace) return fromWorkspace;
+  }
+
+  // Last resort: a local server that answered the cached short probe. This is
+  // what makes "install Ollama and run" work with no keys and no config.
+  const local = cachedLocalProvider(env);
+  if (local) {
+    const provider = findLlmProvider(local.providerId);
+    if (provider) {
+      return {
+        providerId: local.providerId,
+        label: provider.label,
+        baseUrl: local.baseUrl || provider.baseUrl,
+        apiKey: '',
+        model: provider.defaultModel || local.models[0] || '',
+        source: 'env',
+        detected: true
+      };
+    }
   }
 
   return NONE_LLM;
@@ -585,6 +753,226 @@ export function resolveTts(options: ResolveOptions = {}): ResolvedTts {
     return { providerId: 'none', label: 'Silent', baseUrl: '', apiKey: '', model: '', voice: '', source: 'none' };
   }
   return ttsResult(fallback, 'none', envVoice, '');
+}
+
+// ---------------------------------------------------------------------------
+// Transport quirks + protocol adapters
+//
+// The planner and `testProvider` both go through these helpers, so `authStyle`,
+// `pathSuffix`, `extraQuery`, `extraHeaders` and the Anthropic Messages
+// translation are honoured everywhere by construction.
+// ---------------------------------------------------------------------------
+
+export type OpenAiContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string; detail?: string } };
+
+/** OpenAI-chat-shaped message (what the planner builds). */
+export type OpenAiChatMessage = {
+  role: 'system' | 'user' | 'assistant';
+  content: string | OpenAiContentPart[];
+};
+
+export type ChatRequestInput = {
+  /** Catalog id; controls protocol/auth/quirks. Unknown ids use defaults. */
+  providerId?: string;
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+  messages: OpenAiChatMessage[];
+  temperature?: number;
+  maxTokens?: number;
+  env?: EnvBag;
+};
+
+export type BuiltChatRequest = {
+  url: string;
+  headers: Record<string, string>;
+  body: Record<string, unknown>;
+  protocol: ProviderProtocol;
+};
+
+/** `${NAME}` / `${NAME:-default}` expansion used by `extraQuery`/`extraHeaders`. */
+export function resolveEnvTemplate(template: string, env: EnvBag = process.env): string {
+  return template.replace(/\$\{([A-Za-z0-9_]+)(?::-([^}]*))?\}/g, (_match, name: string, fallback?: string) => {
+    const value = envValue(env, name);
+    return value || fallback || '';
+  });
+}
+
+function resolveTemplateMap(map: Record<string, string> | undefined, env: EnvBag): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(map ?? {})) out[key] = resolveEnvTemplate(value, env);
+  return out;
+}
+
+function joinPath(baseUrl: string, suffix: string): string {
+  const base = stripTrailingSlash(baseUrl);
+  if (!suffix) return base;
+  return `${base}${suffix.startsWith('/') ? '' : '/'}${suffix}`;
+}
+
+function providerQueryString(provider: LlmProvider | undefined, env: EnvBag): string {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(resolveTemplateMap(provider?.extraQuery, env))) {
+    if (value) params.set(key, value);
+  }
+  const text = params.toString();
+  return text ? `?${text}` : '';
+}
+
+function withQuery(url: string, query: string): string {
+  if (!query) return url;
+  return `${url}${url.includes('?') ? '&' : '?'}${query.slice(1)}`;
+}
+
+/** Header that carries the credential for this provider's `authStyle`. */
+export function providerAuthHeaders(provider: LlmProvider | undefined, apiKey: string): Record<string, string> {
+  if (!apiKey) return {};
+  const style: ProviderAuthStyle = provider?.authStyle ?? 'bearer';
+  if (style === 'api-key-header') return { 'api-key': apiKey };
+  if (style === 'x-api-key') return { 'x-api-key': apiKey };
+  return { authorization: `Bearer ${apiKey}` };
+}
+
+function providerHeaders(
+  provider: LlmProvider | undefined,
+  apiKey: string,
+  env: EnvBag,
+  jsonBody: boolean
+): Record<string, string> {
+  const headers: Record<string, string> = { accept: 'application/json' };
+  if (jsonBody) headers['content-type'] = 'application/json';
+  Object.assign(headers, resolveTemplateMap(provider?.extraHeaders, env), providerAuthHeaders(provider, apiKey));
+  return headers;
+}
+
+/** Chat endpoint URL, including the provider's path suffix and extra query. */
+export function providerChatUrl(provider: LlmProvider | undefined, baseUrl: string, env: EnvBag = process.env): string {
+  const suffix =
+    provider?.pathSuffix ?? (provider?.protocol === 'anthropic-messages' ? '/messages' : '/chat/completions');
+  return withQuery(joinPath(baseUrl, suffix), providerQueryString(provider, env));
+}
+
+/** Models endpoint URL (discovery), including extra query parameters. */
+export function providerModelsUrl(provider: LlmProvider | undefined, baseUrl: string, env: EnvBag = process.env): string {
+  return withQuery(joinPath(baseUrl, '/models'), providerQueryString(provider, env));
+}
+
+function contentText(content: unknown): string {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return '';
+  return content
+    .map((part) => {
+      if (typeof part === 'string') return part;
+      if (part && typeof part === 'object' && typeof (part as { text?: unknown }).text === 'string') {
+        return (part as { text: string }).text;
+      }
+      return '';
+    })
+    .join('');
+}
+
+function anthropicImageBlock(url: string): Record<string, unknown> {
+  const dataUrl = /^data:([^;,]+);base64,(.+)$/s.exec(url);
+  if (dataUrl) {
+    return { type: 'image', source: { type: 'base64', media_type: dataUrl[1], data: dataUrl[2] } };
+  }
+  return { type: 'image', source: { type: 'url', url } };
+}
+
+function toAnthropicContent(content: string | OpenAiContentPart[]): unknown {
+  if (typeof content === 'string') return content;
+  return content
+    .map((part) => {
+      if (part.type === 'text') return { type: 'text', text: part.text };
+      if (part.type === 'image_url') return anthropicImageBlock(part.image_url.url);
+      return null;
+    })
+    .filter((part): part is Record<string, unknown> => part !== null);
+}
+
+function openAiBody(input: ChatRequestInput): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    model: input.model,
+    messages: input.messages,
+    stream: false
+  };
+  if (input.temperature !== undefined) body.temperature = input.temperature;
+  if (input.maxTokens !== undefined) body.max_tokens = input.maxTokens;
+  return body;
+}
+
+/** Translate an OpenAI-chat request into the Anthropic Messages API shape. */
+function anthropicBody(input: ChatRequestInput): Record<string, unknown> {
+  const systemParts: string[] = [];
+  const messages: Array<Record<string, unknown>> = [];
+  for (const message of input.messages) {
+    if (message.role === 'system') {
+      systemParts.push(contentText(message.content));
+      continue;
+    }
+    messages.push({ role: message.role, content: toAnthropicContent(message.content) });
+  }
+  const body: Record<string, unknown> = {
+    model: input.model,
+    max_tokens: input.maxTokens ?? 1024,
+    messages,
+    stream: false
+  };
+  if (input.temperature !== undefined) body.temperature = input.temperature;
+  if (systemParts.length > 0) body.system = systemParts.join('\n\n');
+  return body;
+}
+
+/** Build the URL/headers/body for one chat turn, quirks included. */
+export function buildChatRequest(input: ChatRequestInput): BuiltChatRequest {
+  const env = input.env ?? process.env;
+  const providerId = (input.providerId ?? '').trim();
+  const provider = findLlmProvider(providerId);
+  const protocol: ProviderProtocol = provider?.protocol ?? 'openai-chat';
+  return {
+    url: providerChatUrl(provider, input.baseUrl, env),
+    headers: providerHeaders(provider, input.apiKey, env, true),
+    body: protocol === 'anthropic-messages' ? anthropicBody(input) : openAiBody(input),
+    protocol
+  };
+}
+
+/** Assistant text from either an OpenAI chat completion or an Anthropic message. */
+export function extractChatText(payload: unknown, providerId?: string): string {
+  const record = payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : null;
+  if (!record) return '';
+  const provider = findLlmProvider((providerId ?? '').trim());
+  if (provider?.protocol === 'anthropic-messages' || Array.isArray(record.content)) {
+    if (typeof record.content === 'string') return record.content;
+    if (!Array.isArray(record.content)) return '';
+    return record.content
+      .map((block) =>
+        block && typeof block === 'object' && typeof (block as { text?: unknown }).text === 'string'
+          ? (block as { text: string }).text
+          : ''
+      )
+      .join('');
+  }
+  const choices = record.choices;
+  if (Array.isArray(choices) && choices.length > 0) {
+    const choice = choices[0] as { message?: { content?: unknown } };
+    return contentText(choice?.message?.content);
+  }
+  return '';
+}
+
+/** Structural check that a 2xx payload really is a chat completion. */
+export function isChatCompletion(payload: unknown, providerId?: string): boolean {
+  const record = payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : null;
+  if (!record) return false;
+  const provider = findLlmProvider((providerId ?? '').trim());
+  if (provider?.protocol === 'anthropic-messages' || Array.isArray(record.content)) {
+    return Array.isArray(record.content) || typeof record.content === 'string';
+  }
+  if (Array.isArray(record.choices) && record.choices.length > 0) return true;
+  return typeof record.model === 'string' && 'usage' in record;
 }
 
 // ---------------------------------------------------------------------------
@@ -799,10 +1187,10 @@ export async function discoverModels(
     };
   }
 
+  const env = options.env ?? process.env;
   const apiKey = requestCredential(provider, options);
-  const url = `${baseUrl}/models`;
-  const headers: Record<string, string> = { accept: 'application/json' };
-  if (apiKey) headers.authorization = `Bearer ${apiKey}`;
+  const url = providerModelsUrl(provider, baseUrl, env);
+  const headers = providerHeaders(provider, apiKey, env, false);
 
   const outcome = await fetchWithTimeout(url, { method: 'GET', headers }, options.timeoutMs ?? MODELS_TIMEOUT_MS);
   if ('error' in outcome) {
@@ -940,27 +1328,28 @@ export async function testProvider(input: ProviderTestInput = {}): Promise<Provi
     model = discovery.models[0];
   }
 
-  const url = `${baseUrl}/chat/completions`;
-  const headers: Record<string, string> = { 'content-type': 'application/json', accept: 'application/json' };
-  if (apiKey) headers.authorization = `Bearer ${apiKey}`;
-  const body = JSON.stringify({
+  // One builder for both protocols and all auth/query/header quirks.
+  const request = buildChatRequest({
+    providerId,
+    baseUrl,
+    apiKey,
     model,
     messages: [{ role: 'user', content: 'Reply with the single word "ok".' }],
-    max_tokens: 8,
     temperature: 0,
-    stream: false
+    maxTokens: 8,
+    env: input.env ?? process.env
   });
 
   const outcome = await fetchWithTimeout(
-    url,
-    { method: 'POST', headers, body },
+    request.url,
+    { method: 'POST', headers: request.headers, body: JSON.stringify(request.body) },
     input.timeoutMs ?? TEST_TIMEOUT_MS
   );
   if ('error' in outcome) return testFailure(started, model, outcome.error);
 
   const response = outcome.response;
   const text = await response.text().catch(() => '');
-  if (!response.ok) return testFailure(started, model, statusError(response.status, text, url));
+  if (!response.ok) return testFailure(started, model, statusError(response.status, text, request.url));
 
   let payload: unknown = null;
   try {
@@ -973,30 +1362,25 @@ export async function testProvider(input: ProviderTestInput = {}): Promise<Provi
         code: 'PROVIDER_BAD_RESPONSE',
         status: response.status,
         message: `The chat endpoint answered with non-JSON.${bodySnippet(text)}`,
-        hint: 'The base URL is probably not an OpenAI-compatible API root.'
+        hint: 'The base URL is probably not an API root for the selected provider.'
       }
     );
   }
 
-  const record = payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : null;
-  const choices = record?.choices;
-  const looksLikeCompletion =
-    Array.isArray(choices) && choices.length > 0
-      ? true
-      : Boolean(record && typeof record.model === 'string' && 'usage' in record);
-  if (!looksLikeCompletion) {
+  if (!isChatCompletion(payload, providerId)) {
     return testFailure(
       started,
       model,
       {
         code: 'PROVIDER_BAD_RESPONSE',
         status: response.status,
-        message: 'The endpoint answered but did not return an OpenAI chat completion.',
-        hint: 'Check the base URL ends in /v1 and the provider is OpenAI-compatible.'
+        message: `The endpoint answered but did not return a ${request.protocol} completion.`,
+        hint: 'Check the base URL and that the provider speaks the selected protocol.'
       }
     );
   }
 
+  const record = payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : null;
   const repliedModel = record && typeof record.model === 'string' && record.model.trim() ? record.model.trim() : model;
   return { ok: true, latencyMs: Date.now() - started, model: repliedModel, error: null };
 }

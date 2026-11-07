@@ -13,9 +13,12 @@
 import type { Observation, PlannedAction, Planner, StepKind } from '../../../core/src/types.ts';
 import { STEP_KINDS } from '../../../core/src/types.ts';
 import {
+  buildChatRequest,
   discoverModels,
+  extractChatText,
   findLlmProvider,
   resolveLlm,
+  type OpenAiChatMessage,
   type ResolvedLlm
 } from '../../../providers/src/index.ts';
 
@@ -78,23 +81,6 @@ Rules:
 - Reply with kind "done" when the goal is achieved, or when it is clearly impossible on this page.`;
 
 const USER_HINT = `Use only the refs listed above. One JSON object.`;
-
-/** Normalise message content from OpenAI-compatible endpoints. */
-function contentToText(content: unknown): string {
-  if (typeof content === 'string') return content;
-  if (Array.isArray(content)) {
-    return content
-      .map((part) => {
-        if (typeof part === 'string') return part;
-        if (part && typeof part === 'object' && typeof (part as { text?: unknown }).text === 'string') {
-          return (part as { text: string }).text;
-        }
-        return '';
-      })
-      .join('');
-  }
-  return '';
-}
 
 /** Best-effort repair of almost-JSON: fences, trailing commas, control chars. */
 export function repairJson(text: string): string {
@@ -292,30 +278,6 @@ export class LlmPlanner implements Planner {
       .join('\n\n');
   }
 
-  private requestBody(observation: Observation, model: string): Record<string, unknown> {
-    const text = this.userMessage(observation);
-    const useImage = this.wantsScreenshot && Boolean(observation.screenshotBase64);
-    const userContent: unknown = useImage
-      ? [
-          { type: 'text', text },
-          {
-            type: 'image_url',
-            image_url: { url: `data:image/png;base64,${observation.screenshotBase64}`, detail: 'low' }
-          }
-        ]
-      : text;
-
-    return {
-      model,
-      temperature: 0.2,
-      max_tokens: 400,
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: userContent }
-      ]
-    };
-  }
-
   async next(observation: Observation): Promise<PlannedAction> {
     const content = await this.complete(observation);
     const parsed = parseJsonObject(content);
@@ -324,17 +286,38 @@ export class LlmPlanner implements Planner {
 
   private async complete(observation: Observation): Promise<string> {
     const model = await this.effectiveModel();
-    const url = `${this.config.baseUrl.replace(/\/+$/, '')}/chat/completions`;
+    const text = this.userMessage(observation);
+    const userContent: OpenAiChatMessage['content'] =
+      this.wantsScreenshot && observation.screenshotBase64
+        ? [
+            { type: 'text', text },
+            {
+              type: 'image_url',
+              image_url: { url: `data:image/png;base64,${observation.screenshotBase64}`, detail: 'low' }
+            }
+          ]
+        : text;
+    // The provider layer owns protocol + transport quirks (Anthropic Messages,
+    // Azure api-key/api-version, extra headers, path suffixes).
+    const request = buildChatRequest({
+      providerId: this.config.providerId,
+      baseUrl: this.config.baseUrl,
+      apiKey: this.config.apiKey,
+      model,
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: userContent }
+      ],
+      temperature: 0.2,
+      maxTokens: 400
+    });
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.config.timeoutMs ?? 60_000);
     try {
-      const response = await fetch(url, {
+      const response = await fetch(request.url, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.config.apiKey}`
-        },
-        body: JSON.stringify(this.requestBody(observation, model)),
+        headers: request.headers,
+        body: JSON.stringify(request.body),
         signal: controller.signal
       });
       if (!response.ok) {
@@ -344,10 +327,8 @@ export class LlmPlanner implements Planner {
           'LLM_HTTP_ERROR'
         );
       }
-      const json = (await response.json()) as {
-        choices?: Array<{ message?: { content?: unknown } }>;
-      };
-      const content = contentToText(json.choices?.[0]?.message?.content);
+      const json: unknown = await response.json();
+      const content = extractChatText(json, this.config.providerId);
       if (!content.trim()) throw new PlannerError('LLM returned an empty message', 'LLM_EMPTY_RESPONSE');
       return content;
     } catch (error) {

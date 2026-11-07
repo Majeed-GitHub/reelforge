@@ -23,7 +23,7 @@ import { authOf } from '../auth.ts';
 import {
   clearProviders,
   listProviderModels,
-  providerStatus,
+  providerStatusWithDetection,
   runProviderTest,
   saveProviders
 } from '../services/providers.ts';
@@ -73,19 +73,26 @@ const testSchema = z
 export async function registerProviderRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/providers', async (request) => {
     const auth = authOf(request);
-    return ok(providerStatus(auth), 'OK');
+    return ok(await providerStatusWithDetection(auth), 'OK');
   });
 
   app.post('/api/providers', async (request) => {
     const auth = authOf(request);
     const body = parseBody(saveSchema, request.body ?? {});
-    const status = saveProviders(auth, body);
-    return ok(status, 'Provider settings saved. Keys are encrypted at rest and never returned.');
+    saveProviders(auth, body);
+    return ok(
+      await providerStatusWithDetection(auth),
+      'Provider settings saved. Keys are encrypted at rest and never returned.'
+    );
   });
 
   app.delete('/api/providers', async (request) => {
     const auth = authOf(request);
-    return ok(clearProviders(auth), 'Workspace provider override cleared — environment variables still apply.');
+    clearProviders(auth);
+    return ok(
+      await providerStatusWithDetection(auth),
+      'Workspace provider override cleared — environment variables still apply.'
+    );
   });
 
   app.get('/api/providers/models', async (request) => {

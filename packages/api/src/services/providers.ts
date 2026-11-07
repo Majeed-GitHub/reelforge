@@ -16,6 +16,7 @@ import {
   findLlmProvider,
   findTtsProvider,
   defaultSettingsReader,
+  detectLocalProviders,
   discoverModels,
   maskKey,
   normalizeBaseUrl,
@@ -29,6 +30,7 @@ import {
   LLM_SETTING_KEYS,
   TTS_SETTING_KEYS,
   type LlmProvider,
+  type LlmTier,
   type ProviderSource,
   type ProviderTestResult,
   type WorkspaceSettingsReader
@@ -45,6 +47,8 @@ export type LlmActiveView = {
   model: string | null;
   baseUrl: string | null;
   source: ProviderSource;
+  /** True when a key/local server was found automatically (no explicit choice). */
+  detected: boolean;
 };
 
 export type LlmProviderView = {
@@ -59,6 +63,9 @@ export type LlmProviderView = {
   source: ProviderSource;
   keyHint: string | null;
   model: string | null;
+  tier: LlmTier;
+  /** True for the card the auto-detect chose. */
+  detected: boolean;
 };
 
 export type LlmStatusView = {
@@ -196,7 +203,8 @@ export function providerStatus(auth: AuthContext): ProviderStatusView {
     providerId: resolvedLlm.source === 'none' ? 'none' : resolvedLlm.providerId,
     model: resolvedLlm.model || null,
     baseUrl: resolvedLlm.baseUrl || null,
-    source: resolvedLlm.source
+    source: resolvedLlm.source,
+    detected: resolvedLlm.detected
   };
 
   const llmProviders: LlmProviderView[] = LLM_PROVIDERS.map((provider) => {
@@ -230,7 +238,9 @@ export function providerStatus(auth: AuthContext): ProviderStatusView {
       configured: Boolean(inEffect || specificEnv || workspaceConfigured),
       source,
       keyHint: maskKey(keyValue),
-      model
+      model,
+      tier: provider.tier,
+      detected: Boolean(inEffect && resolvedLlm.detected)
     };
   });
 
@@ -274,6 +284,16 @@ export function providerStatus(auth: AuthContext): ProviderStatusView {
   return { llm: { active: llmActive, providers: llmProviders }, tts: { active: ttsActive, providers: ttsProviders } };
 }
 
+/**
+ * GET /api/providers — refresh the short local-server probe (cached for a
+ * minute) before assembling the status, so "install Ollama and run" shows up as
+ * the active provider with `detected: true`.
+ */
+export async function providerStatusWithDetection(auth: AuthContext): Promise<ProviderStatusView> {
+  await detectLocalProviders();
+  return providerStatus(auth);
+}
+
 // ---------------------------------------------------------------------------
 // Writes
 // ---------------------------------------------------------------------------
@@ -303,9 +323,12 @@ function saveLlm(auth: AuthContext, input: LlmProviderInput): void {
   const normalizedBase = providedBase ? validateBaseUrl(providedBase) : null;
   const prospectiveBase = normalizedBase ?? (switching ? null : before.baseUrl);
   if (!prospectiveBase && !provider.baseUrl) {
-    throw new ApiError('VALIDATION_ERROR', 'The custom provider needs a baseUrl.', {
+    throw new ApiError('VALIDATION_ERROR', `${provider.label} needs a baseUrl.`, {
       action: 'fix_request',
-      hint: 'Send { "llm": { "providerId": "custom", "baseUrl": "https://gateway.example/v1", "model": "…" } }.'
+      hint:
+        provider.id === 'azure-openai'
+          ? 'Set baseUrl to https://<resource>.openai.azure.com/openai/deployments/<deployment> and model to the deployment name.'
+          : 'Send { "llm": { "providerId": "custom", "baseUrl": "https://gateway.example/v1", "model": "…" } }.'
     });
   }
 
