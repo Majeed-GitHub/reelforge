@@ -217,6 +217,7 @@ any recorder).
 | | |
 |---|---|
 | [FEATURES.md](docs/FEATURES.md) | Every feature, what paid tools charge for it, and why some are missing |
+| [CLIENT-GUIDE.md](docs/CLIENT-GUIDE.md) | A one-page, non-technical guide you can forward to a client |
 | [ROADMAP.md](docs/ROADMAP.md) | An honest audit of what is still missing, and the order to do it |
 | [EMBED.md](docs/EMBED.md) | Embedding a demo in your own site, player params, analytics, privacy |
 | [PRIVACY-MODEL.md](docs/PRIVACY-MODEL.md) | What a recording can and cannot see, and the limits |
