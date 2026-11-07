@@ -1,11 +1,11 @@
-/**
+﻿/**
  * Bring-your-own-key provider catalog.
  *
  * Every LLM Reelforge uses goes through an OpenAI-compatible
  * `POST {baseUrl}/chat/completions`, which is what almost every inference
  * provider now exposes. That means the same planner works against GMI Cloud,
  * OpenAI, OpenRouter, Groq, Together, Fireworks, DeepSeek, a local Ollama, LM
- * Studio, or any custom gateway — you pick with one env var (or in the
+ * Studio, or any custom gateway â€” you pick with one env var (or in the
  * dashboard), and paste your own key.
  *
  * Nothing here makes a network call; see packages/providers for resolution,
@@ -38,7 +38,7 @@ export type LlmProvider = {
   keyEnv: string[];
   /**
    * Preferred model id. Empty string means "ask the provider's /models
-   * endpoint and take the first entry" — used where the catalog moves fast.
+   * endpoint and take the first entry" â€” used where the catalog moves fast.
    */
   defaultModel: string;
   /** Shown in the dashboard when the provider is selected. */
@@ -55,7 +55,7 @@ export const LLM_PROVIDERS: LlmProvider[] = [
     keyEnv: ['GMI_API_KEY', 'REELFORGE_LLM_API_KEY'],
     defaultModel: '',
     helpUrl: 'https://www.gmicloud.ai/',
-    note: 'OpenAI-compatible inference. Model ids look like vendor/model-name — fetch the list from your console.'
+    note: 'OpenAI-compatible inference. Model ids look like vendor/model-name â€” fetch the list from your console.'
   },
   {
     id: 'openai',
@@ -151,8 +151,8 @@ export type TtsProvider = {
   id: TtsProviderId;
   label: string;
   requiresKey: boolean;
-  keyEnv: string[];
-  /** True when it needs nothing but the OS (or a python package). */
+  /** Env vars checked for a key. Empty/absent for offline providers. */
+  keyEnv?: string[];
   offline?: boolean;
   note?: string;
 };

@@ -12,6 +12,12 @@
 
 import type { Observation, PlannedAction, Planner, StepKind } from '../../../core/src/types.ts';
 import { STEP_KINDS } from '../../../core/src/types.ts';
+import {
+  discoverModels,
+  findLlmProvider,
+  resolveLlm,
+  type ResolvedLlm
+} from '../../../providers/src/index.ts';
 
 export class PlannerError extends Error {
   readonly code: string;
@@ -25,9 +31,17 @@ export class PlannerError extends Error {
 
 export type LlmPlannerConfig = {
   instruction: string;
-  baseUrl: string;
-  apiKey: string;
-  model: string;
+  /**
+   * Endpoint settings. Anything omitted falls back to the BYOK provider layer
+   * (`resolveLlm`: env > workspace key > nothing), so a key pasted in the
+   * dashboard configures the planner without restarting anything.
+   */
+  baseUrl?: string;
+  apiKey?: string;
+  /** Empty means "ask the provider's /models endpoint and take the first id". */
+  model?: string;
+  /** Catalog id (`gmi`, `openai`, `ollama`, …), used for discovery + key rules. */
+  providerId?: string;
   timeoutMs?: number;
   /** Also used to fill a login form when the instruction does not name the values. */
   credentials?: { username: string; password: string };
@@ -193,16 +207,72 @@ function historyLines(observation: Observation): string {
   return ['HISTORY:', ...lines].join('\n');
 }
 
+/** Config after provider resolution; everything the request loop needs. */
+type EffectiveLlmConfig = {
+  instruction: string;
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+  providerId: string;
+  timeoutMs: number;
+  credentials?: { username: string; password: string };
+  useVision?: boolean;
+};
+
 export class LlmPlanner implements Planner {
   readonly name = 'llm';
   readonly wantsScreenshot: boolean;
 
-  private readonly config: LlmPlannerConfig;
+  private readonly config: EffectiveLlmConfig;
+  /** Filled lazily from the provider's /models endpoint when no model is set. */
+  private model: string;
 
   constructor(config: LlmPlannerConfig) {
-    if (!config.apiKey.trim()) throw new PlannerError('no API key configured', 'LLM_NO_KEY');
-    this.config = config;
+    // BYOK: env first, then the workspace's encrypted key, then whatever the
+    // caller passed explicitly. A missing key only blocks providers that need
+    // one, which is what makes Ollama / LM Studio work without credentials.
+    const resolved: ResolvedLlm = resolveLlm();
+    const providerId = (config.providerId ?? resolved.providerId).trim() || 'custom';
+    const provider = findLlmProvider(providerId);
+    const pick = (value: string | undefined, fallback: string): string =>
+      value && value.trim() ? value.trim() : fallback;
+
+    const baseUrl = pick(config.baseUrl, resolved.baseUrl || provider?.baseUrl || '').replace(/\/+$/, '');
+    const apiKey = pick(config.apiKey, resolved.apiKey);
+    const model = pick(config.model, resolved.model);
+    const requiresKey = provider ? provider.requiresKey : true;
+
+    if (requiresKey && !apiKey) throw new PlannerError('no API key configured', 'LLM_NO_KEY');
+    if (!baseUrl) throw new PlannerError('no LLM base URL configured', 'LLM_NO_BASE_URL');
+
+    this.config = {
+      instruction: config.instruction,
+      baseUrl,
+      apiKey,
+      model,
+      providerId,
+      timeoutMs: config.timeoutMs ?? 60_000,
+      credentials: config.credentials,
+      useVision: config.useVision
+    };
+    this.model = model;
     this.wantsScreenshot = config.useVision !== false;
+  }
+
+  /** A model id, discovering one from the provider when none is configured. */
+  private async effectiveModel(): Promise<string> {
+    if (this.model) return this.model;
+    const discoveryProvider = findLlmProvider(this.config.providerId) ? this.config.providerId : 'custom';
+    const discovery = await discoverModels(discoveryProvider, {
+      apiKey: this.config.apiKey,
+      baseUrl: this.config.baseUrl
+    });
+    if (!discovery.ok || discovery.models.length === 0) {
+      const detail = discovery.error ? `${discovery.error.code}: ${discovery.error.message}` : 'no models returned';
+      throw new PlannerError(`could not discover a model for ${this.config.providerId} (${detail})`, 'LLM_NO_MODEL');
+    }
+    this.model = discovery.models[0];
+    return this.model;
   }
 
   private userMessage(observation: Observation): string {
@@ -222,7 +292,7 @@ export class LlmPlanner implements Planner {
       .join('\n\n');
   }
 
-  private requestBody(observation: Observation): Record<string, unknown> {
+  private requestBody(observation: Observation, model: string): Record<string, unknown> {
     const text = this.userMessage(observation);
     const useImage = this.wantsScreenshot && Boolean(observation.screenshotBase64);
     const userContent: unknown = useImage
@@ -236,7 +306,7 @@ export class LlmPlanner implements Planner {
       : text;
 
     return {
-      model: this.config.model,
+      model,
       temperature: 0.2,
       max_tokens: 400,
       messages: [
@@ -253,6 +323,7 @@ export class LlmPlanner implements Planner {
   }
 
   private async complete(observation: Observation): Promise<string> {
+    const model = await this.effectiveModel();
     const url = `${this.config.baseUrl.replace(/\/+$/, '')}/chat/completions`;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.config.timeoutMs ?? 60_000);
@@ -263,7 +334,7 @@ export class LlmPlanner implements Planner {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${this.config.apiKey}`
         },
-        body: JSON.stringify(this.requestBody(observation)),
+        body: JSON.stringify(this.requestBody(observation, model)),
         signal: controller.signal
       });
       if (!response.ok) {

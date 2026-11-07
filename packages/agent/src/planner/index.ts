@@ -10,6 +10,7 @@
 
 import type { Observation, PlannedAction, Planner } from '../../../core/src/types.ts';
 import { LLM } from '../../../core/src/config.ts';
+import { findLlmProvider, resolveLlm } from '../../../providers/src/index.ts';
 import { ScriptedPlanner } from './scripted.ts';
 import { LlmPlanner, PlannerError } from './llm.ts';
 import type { LlmSettings } from '../narration.ts';
@@ -17,7 +18,7 @@ import type { LlmSettings } from '../narration.ts';
 export type PlannerConfig = {
   instruction: string;
   credentials?: { username: string; password: string };
-  /** Override the endpoint settings (defaults to config.LLM). */
+  /** Override the endpoint settings (defaults to the BYOK provider layer). */
   llm?: LlmSettings;
   /** Send screenshots to vision-capable models. Defaults to true. */
   useVision?: boolean;
@@ -27,8 +28,33 @@ export type PlannerConfig = {
 
 /** True when an OpenAI-compatible endpoint is configured and not disabled. */
 export function llmConfigured(settings: LlmSettings = LLM): boolean {
-  if ((settings.provider ?? 'auto') === 'none') return false;
+  const providerId = (settings.provider ?? 'auto').trim().toLowerCase();
+  if (providerId === 'none') return false;
+  const provider = findLlmProvider(providerId);
+  // Local/keyless providers (Ollama, LM Studio, a keyless gateway) only need a URL.
+  if (provider && !provider.requiresKey) {
+    return Boolean((settings.baseUrl ?? '').trim() || provider.baseUrl);
+  }
   return Boolean((settings.apiKey ?? '').trim());
+}
+
+/**
+ * Resolve the planner endpoint through the BYOK layer: env first, then the
+ * workspace's encrypted key, then nothing (offline scripted planner).
+ * A dashboard-saved key therefore works without restarting the process.
+ */
+function llmSettingsFromProviders(): LlmSettings {
+  const resolved = resolveLlm();
+  if (resolved.source === 'none') {
+    return { provider: 'none', baseUrl: '', apiKey: '', model: '', timeoutMs: LLM.timeoutMs };
+  }
+  return {
+    provider: resolved.providerId,
+    baseUrl: resolved.baseUrl,
+    apiKey: resolved.apiKey,
+    model: resolved.model,
+    timeoutMs: LLM.timeoutMs
+  };
 }
 
 function errorMessage(error: unknown): string {
@@ -70,7 +96,7 @@ class ResiliencePlanner implements Planner {
 }
 
 export function createPlanner(config: PlannerConfig): Planner {
-  const settings: LlmSettings = { ...LLM, ...(config.llm ?? {}) };
+  const settings: LlmSettings = config.llm ? { ...LLM, ...config.llm } : llmSettingsFromProviders();
   const scripted = new ScriptedPlanner({
     instruction: config.instruction,
     credentials: config.credentials
@@ -84,14 +110,17 @@ export function createPlanner(config: PlannerConfig): Planner {
   try {
     const primary = new LlmPlanner({
       instruction: config.instruction,
-      baseUrl: settings.baseUrl ?? LLM.baseUrl,
-      apiKey: settings.apiKey ?? '',
-      model: settings.model ?? LLM.model,
+      baseUrl: settings.baseUrl,
+      apiKey: settings.apiKey,
+      model: settings.model,
+      providerId: settings.provider,
       timeoutMs: settings.timeoutMs ?? LLM.timeoutMs,
       credentials: config.credentials,
       useVision: config.useVision !== false
     });
-    config.onLog?.(`[planner] using ${primary.name} (${settings.model ?? LLM.model}) with scripted fallback`);
+    config.onLog?.(
+      `[planner] using ${primary.name} (${settings.model || 'auto-discovered model'}) with scripted fallback`
+    );
     return new ResiliencePlanner(primary, scripted, config.onLog);
   } catch (error) {
     config.onLog?.(`[planner] could not start the LLM planner (${errorMessage(error)}) — using the offline scripted planner`);
