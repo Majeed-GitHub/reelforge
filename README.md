@@ -4,6 +4,8 @@
 
 An open-source, self-hosted alternative to commercial demo agents ([Screenforge Director](https://director.screenforge.co) is the one it was reverse-engineered from — see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)). **Bring your own model key, or run it completely offline.** No account, no per-seat pricing, no vendor holding your screen recordings.
 
+**Free forever:** MIT licence, no paid tier, no export caps, no seat limits, no telemetry, and the watermark is a render option you control rather than a licence gate.
+
 [![CI](https://github.com/YOUR_GITHUB_USER/reelforge/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR_GITHUB_USER/reelforge/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-FF5C38.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%E2%89%A522.6-3ddc97.svg)](package.json)
@@ -74,18 +76,21 @@ URL + one sentence
 The planner is a single `/chat/completions` call, so it works with almost anything.
 Set it with env vars or paste a key in **Settings → Model provider**.
 
-| Provider | `REELFORGE_LLM_PROVIDER` | Key env | Notes |
-|---|---|---|---|
-| **GMI Cloud** | `gmi` | `GMI_API_KEY` | `https://api.gmi-serving.com/v1` — model ids from your console |
-| OpenAI | `openai` | `OPENAI_API_KEY` | `gpt-4.1-mini` default |
-| OpenRouter | `openrouter` | `OPENROUTER_API_KEY` | one key, most frontier models |
-| Groq | `groq` | `GROQ_API_KEY` | very fast |
-| Together | `together` | `TOGETHER_API_KEY` | |
-| Fireworks | `fireworks` | `FIREWORKS_API_KEY` | |
-| DeepSeek | `deepseek` | `DEEPSEEK_API_KEY` | |
-| Ollama | `ollama` | — | local, no key |
-| LM Studio | `lmstudio` | — | local, no key |
-| Custom | `custom` | `REELFORGE_LLM_API_KEY` | any `/chat/completions` gateway |
+**31 providers, no configuration required if you already have a key.** Reelforge
+auto-detects any conventional key in your environment (then probes local servers), so the
+provider choice is optional.
+
+| Tier | Providers |
+|---|---|
+| **Free / open tiers** (10) | Google Gemini, OpenRouter, Groq, Mistral, Cerebras, NVIDIA NIM, GitHub Models (free with a GitHub token), Hugging Face, SambaNova, Alibaba DashScope |
+| **Paid** (15) | GMI Cloud, OpenAI, Anthropic, DeepSeek, xAI/Grok, Together, Fireworks, DeepInfra, Nebius, Novita, Hyperbolic, Moonshot, Zhipu/GLM, Perplexity, Azure OpenAI |
+| **Local, no key** (6) | Ollama, LM Studio, llama.cpp, vLLM, LocalAI, and a Custom endpoint |
+
+Provider quirks are data rather than code paths, so **Azure** (deployment URL, `api-key`
+header, `api-version`) and **Anthropic** (native Messages API, translated) work like every
+other card. AWS Bedrock and Google Vertex need SigV4/OAuth instead of a key, so they are
+documented as unsupported with an OpenAI-compatible proxy workaround — not faked. Full
+matrix: [docs/PROVIDERS.md](docs/PROVIDERS.md).
 
 ```bash
 # example: GMI Cloud
@@ -198,6 +203,7 @@ any recorder).
 
 | | |
 |---|---|
+| [FEATURES.md](docs/FEATURES.md) | Every feature, what paid tools charge for it, and why some are missing |
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | What was reverse-engineered, and how it is built |
 | [VERIFICATION.md](docs/VERIFICATION.md) | Every check, every number, and the honest gaps |
 | [API.md](docs/API.md) | REST surface, error codes, MCP tools |
