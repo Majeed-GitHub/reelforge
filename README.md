@@ -204,6 +204,7 @@ any recorder).
 | | |
 |---|---|
 | [FEATURES.md](docs/FEATURES.md) | Every feature, what paid tools charge for it, and why some are missing |
+| [ROADMAP.md](docs/ROADMAP.md) | An honest audit of what is still missing, and the order to do it |
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | What was reverse-engineered, and how it is built |
 | [VERIFICATION-V03.md](docs/VERIFICATION-V03.md) | v0.3 evidence: aspect ratios, ducking, redaction pixels, walkthrough |
 | [VERIFICATION.md](docs/VERIFICATION.md) | Every check, every number, and the honest gaps |
