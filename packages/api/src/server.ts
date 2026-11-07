@@ -13,6 +13,7 @@ import demoRoutes from './routes/demos.ts';
 import exportRoutes from './routes/exports.ts';
 import shareRoutes from './routes/share.ts';
 import walkthroughRoutes from './routes/walkthrough.ts';
+import embedRoutes from './routes/embed.ts';
 import domainRoutes from './routes/domains.ts';
 import environmentRoutes from './routes/environments.ts';
 import fileRoutes from './routes/files.ts';
@@ -157,6 +158,8 @@ export async function buildServer(options: BuildOptions = {}): Promise<FastifyIn
   await app.register(shareRoutes);
   // Interactive walkthrough output: one self-contained HTML file per demo.
   await app.register(walkthroughRoutes);
+  // Embeddable player (/embed/:token) + per-demo analytics.
+  await app.register(embedRoutes);
   await app.register(webhookRoutes);
   await app.register(environmentRoutes);
   await app.register(domainRoutes);

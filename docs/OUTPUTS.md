@@ -27,6 +27,15 @@ signed-URL mechanism: `GET /api/files/<token>`, HMAC-SHA256 over
 needed (a `<video src>` cannot send headers). Share pages re-sign those media
 URLs on every page load.
 
+**Embedding & view counts.** Any finished demo can be iframed on your own site,
+docs or blog — `GET /api/demos/:id/embed` returns a 90-day `/embed/:token` URL
+plus a paste-ready `<iframe>` (16:9, native controls, optional WebVTT captions,
+`?autoplay` / `muted` / `loop` / `start` / `badge=0` params), and loads of the
+share page, embed and walkthrough are counted per demo with no IPs,
+User-Agents or cookies, readable from `GET /api/demos/:id/analytics`; the
+embedding guide, CSP notes and the privacy statement live in
+[EMBED.md](./EMBED.md).
+
 ---
 
 ## 1. The finished video

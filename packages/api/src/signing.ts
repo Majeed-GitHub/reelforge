@@ -155,6 +155,49 @@ export function verifyWalkthroughToken(token: string): VerifiedWalkthroughToken 
   return { exportId: claims.w, expiresAt: claims.e };
 }
 
+/**
+ * Embeddable-player links.
+ *
+ * `GET /embed/:token` is framed by other people's sites, so it cannot use the
+ * 1-hour media TTL or the 30-day share TTL: the snippet is pasted into a docs
+ * site and lives there. Same HMAC claim pattern, 90 days, keyed by demo id, and
+ * a distinct claim name so a token minted for one public surface is not
+ * silently valid on another.
+ */
+export const EMBED_TOKEN_TTL_MS = 90 * 24 * 60 * 60 * 1000;
+
+type EmbedClaims = { emb: string; e: number };
+
+/** demo id -> opaque embed token (HMAC-signed, 90-day expiry). */
+export function signEmbedToken(demoId: string, ttlMs: number = EMBED_TOKEN_TTL_MS): string {
+  const claims: EmbedClaims = { emb: demoId, e: Date.now() + ttlMs };
+  const payload = b64url(JSON.stringify(claims));
+  return `${payload}.${hmac(payload)}`;
+}
+
+export type VerifiedEmbedToken = { demoId: string; expiresAt: number };
+
+export function verifyEmbedToken(token: string): VerifiedEmbedToken | null {
+  const value = String(token ?? '');
+  const dot = value.lastIndexOf('.');
+  if (dot <= 0) return null;
+  const payload = value.slice(0, dot);
+  const signature = value.slice(dot + 1);
+  const expected = hmac(payload);
+  if (signature.length !== expected.length) return null;
+  if (!crypto.timingSafeEqual(Buffer.from(signature, 'utf8'), Buffer.from(expected, 'utf8'))) return null;
+  let claims: EmbedClaims;
+  try {
+    claims = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as EmbedClaims;
+  } catch {
+    return null;
+  }
+  if (!claims || typeof claims.emb !== 'string' || !claims.emb) return null;
+  if (typeof claims.e !== 'number') return null;
+  if (Date.now() > claims.e) return null;
+  return { demoId: claims.emb, expiresAt: claims.e };
+}
+
 export const MIME_BY_EXT: Record<string, string> = {
   '.mp4': 'video/mp4',
   '.webm': 'video/webm',

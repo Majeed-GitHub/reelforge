@@ -17,6 +17,7 @@ import { PUBLIC_BASE_URL } from '../../../core/src/config.ts';
 import type { ArticleRow, DemoFailure, DemoRow, DemoStatus } from '../../../core/src/types.ts';
 import { authOf } from '../auth.ts';
 import { one } from '../dbq.ts';
+import { recordView } from '../services/analytics.ts';
 import { getDemoRow } from '../services/demos.ts';
 import { SHARE_TOKEN_TTL_MS, mediaUrl, signShareToken, verifyShareToken } from '../signing.ts';
 import { safeJson } from '../util.ts';
@@ -285,6 +286,8 @@ export default async function shareRoutes(app: FastifyInstance): Promise<void> {
       reply.code(404).type(HTML_TYPE).header('cache-control', 'no-store');
       return reply.send(errorPage('That demo is no longer available.', 'It may have been deleted from this Reelforge instance.'));
     }
+    // One analytics row per share-page load (no IP, no User-Agent stored).
+    recordView(demo.id, 'share', request.headers['user-agent']);
     reply.type(HTML_TYPE).header('cache-control', 'no-store').header('x-robots-tag', 'noindex');
     return reply.send(renderSharePage(demo));
   });

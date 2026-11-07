@@ -21,6 +21,7 @@ import { ok } from '../../../core/src/http.ts';
 import type { DemoRow } from '../../../core/src/types.ts';
 import { authOf } from '../auth.ts';
 import { one } from '../dbq.ts';
+import { recordView } from '../services/analytics.ts';
 import { getDemoRow } from '../services/demos.ts';
 import { generateWalkthrough } from '../services/walkthrough.ts';
 import { signWalkthroughToken, verifyWalkthroughToken } from '../signing.ts';
@@ -76,8 +77,8 @@ export default async function walkthroughRoutes(app: FastifyInstance): Promise<v
       );
     }
 
-    const row = one<{ id: string; path: string | null; status: string }>(
-      "SELECT id, path, status FROM demo_exports WHERE id = ? AND kind = 'walkthrough'",
+    const row = one<{ id: string; demo_id: string; path: string | null; status: string }>(
+      "SELECT id, demo_id, path, status FROM demo_exports WHERE id = ? AND kind = 'walkthrough'",
       verified.exportId
     );
     const absPath = row?.path ? absoluteFromData(row.path) : null;
@@ -87,6 +88,9 @@ export default async function walkthroughRoutes(app: FastifyInstance): Promise<v
         errorPage('That walkthrough is no longer available.', 'The generated file may have been deleted from this Reelforge instance.')
       );
     }
+
+    // One analytics row per walkthrough load (no IP, no User-Agent stored).
+    recordView(row.demo_id, 'walkthrough', request.headers['user-agent']);
 
     reply
       .type(HTML_TYPE)
