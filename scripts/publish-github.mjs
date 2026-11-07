@@ -203,7 +203,7 @@ if (!exists.ok) {
 
 step('Setting repo metadata');
 sh('gh', ['repo', 'edit', full, '--description', DESCRIPTION]);
-sh('gh', ['repo', 'edit', full, '--add-topic', ...TOPICS]);
+sh('gh', ['repo', 'edit', full, '--add-topic', TOPICS.join(',')]);
 sh('gh', ['repo', 'edit', full, '--enable-issues', '--enable-discussions']);
 
 // --- 3. release --------------------------------------------------------------
