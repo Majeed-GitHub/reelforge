@@ -32,6 +32,19 @@ import { CURSOR_INIT_SCRIPT } from './injected.ts';
 import { observe } from './observer.ts';
 import { cleanNarration, createNarrator } from './narration.ts';
 import { createPlanner } from './planner/index.ts';
+import {
+  MASK_COLOR,
+  clearRedactionMarks,
+  collectRedactionTargets,
+  describeRedactions,
+  isSensitiveTarget,
+  mergeTargets,
+  redactValue,
+  redactionBoxesForStep,
+  redactionOptionsFrom,
+  scrubSecrets
+} from './redaction.ts';
+import type { RedactionOptions, RedactionTarget } from './redaction.ts';
 
 /** Best-effort loop budget: options.maxSteps is honoured, the cap is not negotiable. */
 export const MAX_STEPS_HARD_CAP = 60;
@@ -59,6 +72,13 @@ export type RunCaptureInput = {
   environment?: { id?: string; baseUrl: string; storageState?: StorageState | string };
   /** Injected planner, for tests. Defaults to `createPlanner`. */
   planner?: Planner;
+  /**
+   * Redaction escape hatches. Defaults are the safe ones:
+   *  - `dedupeConsecutive: false` keeps one entry per step, because a renderer
+   *    that blurs per step window would un-blur a field that is still visible.
+   *    Turning it on requires the renderer to hold a blur until the next entry.
+   */
+  redaction?: { dedupeConsecutive?: boolean };
   /** Extra log sink (the demo worker streams these). */
   onLog?: (line: string) => void;
 };
@@ -110,9 +130,16 @@ function isDestructiveName(name: string | undefined): boolean {
   return Boolean(name && DESTRUCTIVE_NAME.test(name));
 }
 
-function isSecretField(element: ElementRef | undefined, selector: string | undefined): boolean {
+/**
+ * Fallback text check by accessible name / selector (the live DOM probe is
+ * primary). Password-ish fields are always secret; the wider heuristic set is
+ * only applied when `redactSensitive` is on.
+ */
+function isSecretField(element: ElementRef | undefined, selector: string | undefined, extended = true): boolean {
   const haystack = `${element?.name ?? ''} ${selector ?? ''}`;
-  return /password|passcode|secret|token|api[-_ ]?key/i.test(haystack);
+  if (/passw|passcode/i.test(haystack)) return true;
+  if (!extended) return false;
+  return /secret|token|api[-_ ]?key|card|cc[-_]|cvv|cvc|ssn/i.test(haystack);
 }
 
 /** options.language ("en", "es-MX") -> a Chromium locale; demos default to en-US. */
@@ -201,9 +228,16 @@ export async function runCapture(input: RunCaptureInput): Promise<CaptureResult>
   const shotsDir = path.join(PATHS.screenshots, demoId);
   const demoVideoPath = path.join(rawDir, 'demo.webm');
 
+  const redactionOptions: RedactionOptions = redactionOptionsFrom(options);
+  const dedupeConsecutive = input.redaction?.dedupeConsecutive === true;
+  // Boxes for the renderer to blur, one entry per on-screen box per step.
+  const redactions: Array<Box & { stepIndex: number }> = [];
+  // Literal secrets that must never appear in a log line (test-account password).
+  const logSecrets = request.credentials?.password ? [request.credentials.password] : [];
+
   const log: string[] = [];
   const push = (line: string): void => {
-    const entry = `${new Date().toISOString()} ${line}`;
+    const entry = `${new Date().toISOString()} ${scrubSecrets(line, logSecrets)}`;
     log.push(entry);
     input.onLog?.(entry);
   };
@@ -305,6 +339,7 @@ export async function runCapture(input: RunCaptureInput): Promise<CaptureResult>
       const history: PlannedAction[] = [];
       let plannerDone = false;
       let consecutiveErrors = 0;
+      let redactionState: { beforeUrl: string; targets: RedactionTarget[] } = { beforeUrl: '', targets: [] };
 
       for (let index = 0; index < maxSteps; index += 1) {
         if (!page || page.isClosed()) {
@@ -315,12 +350,29 @@ export async function runCapture(input: RunCaptureInput): Promise<CaptureResult>
 
         let observation;
         try {
+          // Redaction targets are per-page: find them once per observation and
+          // keep the locators for this step's screenshot.
+          let stepTargets: RedactionTarget[] = [];
+          try {
+            const collected = await collectRedactionTargets(page, redactionOptions);
+            stepTargets = collected.targets;
+            if (collected.invalidSelectors.length > 0) {
+              push(`[agent] ignoring invalid redactSelectors: ${collected.invalidSelectors.join(', ')}`);
+            }
+          } catch (error) {
+            push(`[agent] redaction scan failed on step ${index} (continuing): ${errorMessage(error)}`);
+          }
+
+          const beforeUrl = page.url();
           observation = await observe(page, {
             step: index,
             goal: instruction,
             history: [...history],
-            screenshot: wantsScreenshot(planner)
+            screenshot: wantsScreenshot(planner),
+            mask: stepTargets.map((target) => target.mask),
+            maskColor: MASK_COLOR
           });
+          redactionState = { beforeUrl, targets: stepTargets };
         } catch (error) {
           failure = makeFailure('INTERNAL_ERROR', `Observation failed on step ${index}: ${errorMessage(error)}`);
           push(`[agent] ${failure.message}`);
@@ -379,7 +431,10 @@ export async function runCapture(input: RunCaptureInput): Promise<CaptureResult>
         }
 
         // Narration: planner-provided first, template/LLM otherwise.
-        const narration = cleanNarration(action.narration) || (await narrator.narrate(action, element, history, instruction));
+        const narration = scrubSecrets(
+          cleanNarration(action.narration) || (await narrator.narrate(action, element, history, instruction)),
+          logSecrets
+        );
 
         const record: StepRecord = {
           index,
@@ -400,9 +455,18 @@ export async function runCapture(input: RunCaptureInput): Promise<CaptureResult>
         }
 
         try {
-          await performAction({ page, action, element, selector, record, mouse, startedAtEpochMs });
+          await performAction({
+            page,
+            action,
+            element,
+            selector,
+            record,
+            mouse,
+            startedAtEpochMs,
+            redactionOptions
+          });
         } catch (error) {
-          record.error = errorMessage(error);
+          record.error = scrubSecrets(errorMessage(error), logSecrets);
           consecutiveErrors += 1;
           push(`[agent] step ${index} (${action.kind}) failed: ${record.error}`);
         }
@@ -412,13 +476,68 @@ export async function runCapture(input: RunCaptureInput): Promise<CaptureResult>
           record.url = action.url;
         }
 
+        // A click or goto may have landed on a new document: collect that page's
+        // sensitive fields too, so the step's PNG (and the video tail) is covered.
+        let stepTargets = redactionState.targets;
+        if (page.url() !== redactionState.beforeUrl) {
+          try {
+            const afterTargets = await collectRedactionTargets(page, redactionOptions);
+            stepTargets = mergeTargets(stepTargets, afterTargets.targets);
+          } catch {
+            // best effort
+          }
+        }
+
+        const masks = stepTargets.map((target) => target.mask);
+        const shotPath = path.join(shotsDir, `${index}.png`);
         try {
-          const shotPath = path.join(shotsDir, `${index}.png`);
-          await page.screenshot({ path: shotPath, type: 'png' });
+          await page.screenshot({
+            path: shotPath,
+            type: 'png',
+            ...(masks.length > 0 ? { mask: masks, maskColor: MASK_COLOR } : {})
+          });
           record.screenshotPath = shotPath;
         } catch (error) {
-          push(`[agent] screenshot for step ${index} failed: ${errorMessage(error)}`);
+          // Fail closed: never write an unmasked PNG. Retry once with freshly
+          // resolved masks (the first attempt may hold a detached locator).
+          try {
+            const retry = await collectRedactionTargets(page, redactionOptions);
+            stepTargets = mergeTargets(stepTargets, retry.targets);
+            const retryMasks = stepTargets.map((target) => target.mask);
+            await page.screenshot({
+              path: shotPath,
+              type: 'png',
+              ...(retryMasks.length > 0 ? { mask: retryMasks, maskColor: MASK_COLOR } : {})
+            });
+            record.screenshotPath = shotPath;
+            push(`[agent] step ${index} screenshot needed a masked retry: ${errorMessage(error)}`);
+          } catch (retryError) {
+            push(
+              `[agent] step ${index} masked screenshot failed; no PNG written rather than an unmasked one: ${errorMessage(retryError)}`
+            );
+          }
         }
+        await clearRedactionMarks(page);
+
+        // Record this step's boxes for the renderer (per-step time window).
+        const stepBoxes = redactionBoxesForStep(stepTargets, index);
+        let added = 0;
+        for (const box of stepBoxes) {
+          if (dedupeConsecutive) {
+            const sameAsPrevious = redactions.some(
+              (entry) =>
+                entry.stepIndex === index - 1 &&
+                entry.x === box.x &&
+                entry.y === box.y &&
+                entry.width === box.width &&
+                entry.height === box.height
+            );
+            if (sameAsPrevious) continue;
+          }
+          redactions.push(box);
+          added += 1;
+        }
+        if (added > 0) push(`[agent] ${describeRedactions(redactionBoxesForStep(stepTargets, index), stepTargets)}`);
 
         steps.push(record);
         history.push(action);
@@ -510,6 +629,10 @@ export async function runCapture(input: RunCaptureInput): Promise<CaptureResult>
     }
   }
 
+  const safeFailure = failure
+    ? { ...failure, message: scrubSecrets(failure.message, logSecrets) }
+    : undefined;
+
   const result: CaptureResult = {
     steps,
     viewport: { ...VIEWPORT },
@@ -519,7 +642,8 @@ export async function runCapture(input: RunCaptureInput): Promise<CaptureResult>
     goalMet,
     finalUrl,
     ...(stoppedBefore ? { stoppedBefore } : {}),
-    ...(failure ? { error: failure } : {}),
+    ...(safeFailure ? { error: safeFailure } : {}),
+    ...(redactions.length > 0 ? { redactions } : {}),
     log
   };
 
@@ -544,10 +668,11 @@ type PerformInput = {
   record: StepRecord;
   mouse: { x: number; y: number };
   startedAtEpochMs: number;
+  redactionOptions: RedactionOptions;
 };
 
 async function performAction(input: PerformInput): Promise<void> {
-  const { page, action, element, selector, record, mouse } = input;
+  const { page, action, element, selector, record, mouse, redactionOptions } = input;
 
   switch (action.kind) {
     case 'click': {
@@ -586,7 +711,12 @@ async function performAction(input: PerformInput): Promise<void> {
       }
       const value = action.value ?? '';
       await page.keyboard.type(value, { delay: 45 });
-      record.value = isSecretField(element, selector) ? '[redacted]' : value;
+      // Text layer: never persist a typed secret. Password inputs are always
+      // redacted; the rest follow the redactSensitive heuristics + user selectors.
+      const sensitive =
+        (await isSensitiveTarget(page, selector, redactionOptions)) ||
+        isSecretField(element, selector, redactionOptions.redactSensitive !== false);
+      record.value = redactValue(value, sensitive);
       await settle(page, 180);
       return;
     }

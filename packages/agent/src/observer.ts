@@ -8,7 +8,7 @@
  * recorded flow can be reverified later (see reverify.ts).
  */
 
-import type { Page } from 'playwright';
+import type { Locator, Page } from 'playwright';
 import type { ElementRef, Observation, PlannedAction } from '../../core/src/types.ts';
 
 export type ObserveOptions = {
@@ -23,6 +23,13 @@ export type ObserveOptions = {
    * because a screenshot per step is the single most expensive part of a run.
    */
   screenshot?: boolean;
+  /**
+   * Locators to paint over before the screenshot is encoded — sensitive fields
+   * must never reach a planner (or a log) as pixels.
+   */
+  mask?: Locator[];
+  /** Fill colour for masked regions. Defaults to opaque black. */
+  maskColor?: string;
   /** Maximum elements to inventory (default 120). */
   limit?: number;
 };
@@ -59,7 +66,10 @@ export async function observe(page: Page, opts: ObserveOptions = {}): Promise<Ob
   let screenshotBase64: string | undefined;
   if (opts.screenshot) {
     try {
-      const buffer = await page.screenshot({ type: 'png' });
+      const buffer = await page.screenshot({
+        type: 'png',
+        ...(opts.mask && opts.mask.length > 0 ? { mask: opts.mask, maskColor: opts.maskColor ?? '#000000' } : {})
+      });
       screenshotBase64 = Buffer.from(buffer).toString('base64');
     } catch {
       // A screenshot is a nice-to-have; never fail an observation over it.

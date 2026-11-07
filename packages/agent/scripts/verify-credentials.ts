@@ -13,6 +13,8 @@ import path from 'node:path';
 import { PATHS, ROOT } from '../../core/src/config.ts';
 import type { CaptureResult } from '../../core/src/types.ts';
 import { runCapture } from '../src/runner.ts';
+import { REDACTED_VALUE } from '../src/redaction.ts';
+import { readPng } from './png.ts';
 import { BASE_URL, resetDemoSite, startDemoSite, stopDemoSite } from './demo.ts';
 
 let failures = 0;
@@ -59,12 +61,29 @@ async function main(): Promise<void> {
     check('typed the email into the form', Boolean(emailStep), emailStep?.selector);
     check('typed the password into the form', Boolean(passwordStep), passwordStep?.selector);
     check('email value is recorded', emailStep?.value === 'ada@example.com', String(emailStep?.value));
-    check('password value is redacted in the step record', passwordStep?.value === '[redacted]', String(passwordStep?.value));
+    check('password value is redacted in the step record', passwordStep?.value === REDACTED_VALUE, String(passwordStep?.value));
     check(
       'both sign-in fields have viewport boxes',
       Boolean(emailStep?.box && passwordStep?.box),
       JSON.stringify([emailStep?.box, passwordStep?.box])
     );
+
+    // Redaction on the real demo flow: the password field is on screen when the
+    // sign-in form is observed, so it must be a redaction box and black in pixels.
+    const signInStepIndexes = new Set(
+      [passwordStep?.index, emailStep?.index].filter((index): index is number => typeof index === 'number')
+    );
+    const passwordBoxes = (capture.redactions ?? []).filter((entry) => signInStepIndexes.has(entry.stepIndex));
+    check('the sign-in password field is recorded as a redaction box', passwordBoxes.length > 0, JSON.stringify(passwordBoxes));
+    if (passwordStep?.screenshotPath && passwordStep.box) {
+      const png = readPng(passwordStep.screenshotPath);
+      const centre = { x: passwordStep.box.x + passwordStep.box.width / 2, y: passwordStep.box.y + passwordStep.box.height / 2 };
+      check('the password field is black in the step PNG', png.isBlack(centre.x, centre.y));
+      check(
+        'the email field on the same PNG is not masked',
+        Boolean(emailStep?.box) && !png.isBlack(emailStep!.box!.x + emailStep!.box!.width / 2, emailStep!.box!.y + emailStep!.box!.height / 2)
+      );
+    }
 
     const demoDir = capture.videoPath ? path.dirname(capture.videoPath) : '';
     const captureJson = demoDir ? fs.readFileSync(path.join(demoDir, 'capture.json'), 'utf8') : '';

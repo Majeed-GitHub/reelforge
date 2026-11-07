@@ -27,6 +27,7 @@ import { runCapture } from '../src/runner.ts';
 import type { StorageState } from '../src/runner.ts';
 import { reverifyFlow } from '../src/reverify.ts';
 import { BASE_URL, resetDemoSite, startDemoSite, stopDemoSite } from './demo.ts';
+import { readPng } from './png.ts';
 
 const require = createRequire(import.meta.url);
 
@@ -141,6 +142,29 @@ function assertCapture(capture: CaptureResult): void {
     if (stream && stream.height !== 720) fail(`video height is ${String(stream.height)}, expected 720`);
   }
   if (capture.endedAtEpochMs - capture.startedAtEpochMs < 1500) fail('recording window is implausibly short');
+
+  // Privacy redaction on the real flow: the sign-in form has a password field,
+  // so it must be a redaction box, and the saved PNG must contain the black mask.
+  const redactions = capture.redactions ?? [];
+  if (redactions.length === 0) fail('expected the sign-in password field in capture.redactions');
+  for (const entry of redactions) {
+    if (!Number.isInteger(entry.stepIndex)) fail(`redaction without integer stepIndex: ${JSON.stringify(entry)}`);
+    if (entry.width <= 0 || entry.height <= 0) fail(`redaction has an empty box: ${JSON.stringify(entry)}`);
+    if (entry.x < 0 || entry.y < 0 || entry.x + entry.width > 1280.5 || entry.y + entry.height > 720.5) {
+      fail(`redaction box is outside the 1280x720 viewport: ${JSON.stringify(entry)}`);
+    }
+  }
+  let blackBoxes = 0;
+  for (const entry of redactions) {
+    const step = capture.steps[entry.stepIndex];
+    if (!step?.screenshotPath) continue;
+    const image = readPng(step.screenshotPath);
+    if (image.isBlack(entry.x + entry.width / 2, entry.y + entry.height / 2)) blackBoxes += 1;
+  }
+  if (blackBoxes === 0) fail(`no redaction box is pure black in a saved PNG (checked ${redactions.length})`);
+  console.log(
+    `[e2e] redactions: ${redactions.length} box(es) ${JSON.stringify(redactions)}; ${blackBoxes}/${redactions.length} black in their step PNG`
+  );
 }
 
 function printStepTable(capture: CaptureResult): void {
@@ -263,6 +287,9 @@ async function main(): Promise<void> {
       `  screenshots:  ${capture.steps.filter((s) => s.screenshotPath).length} PNGs in ${rel(path.join(PATHS.screenshots, path.basename(demoDir)))}`
     );
     console.log(`  reverify:     fresh -> ${fresh.staleSteps.length} stale; corrupted -> ${stale.staleSteps.length} stale`);
+    console.log(
+      `  redactions:   ${(capture.redactions ?? []).length} box(es) in capture.json (login password field), verified black in the PNG`
+    );
   } finally {
     await stopDemoSite(child);
   }

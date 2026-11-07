@@ -42,8 +42,9 @@ Artifacts written under `REELFORGE_DATA_DIR` (`data/` by default):
 |---|---|
 | `data/raw/<demoId>/demo.webm` | the recording (Playwright's raw video, renamed) |
 | `data/raw/<demoId>/session.json` | captured `storageState` for environment reuse |
-| `data/raw/<demoId>/capture.json` | the full `CaptureResult`, for debugging |
-| `data/screenshots/<demoId>/<idx>.png` | one viewport PNG per step |
+| `data/raw/<demoId>/capture.json` | the full `CaptureResult` (steps, redactions, log) |
+| `data/screenshots/<demoId>/<idx>.png` | one viewport PNG per step (sensitive fields already masked) |
+| `data/tmp/redaction-fixture.html` | generated fixture used by `verify-redaction.ts` |
 
 ## Pieces
 
@@ -61,6 +62,45 @@ Artifacts written under `REELFORGE_DATA_DIR` (`data/` by default):
 
 Node runs TypeScript natively, so local imports carry the `.ts` extension.
 
+## Privacy redaction (v0.3)
+
+Demos record real screens, so secrets are removed in three places:
+
+1. **Screenshots** — Playwright's native `page.screenshot({ mask, maskColor: '#000000' })`
+   paints the element's box black *before the PNG is encoded*, so the value never
+   reaches disk. Targets are found once per observation (`src/redaction.ts`) and
+   reused for that step's screenshot, including the screenshot handed to a
+   vision-capable planner.
+2. **Video** — can't be masked in the page (the app needs the real value, and
+   painting on the page would be recorded). Instead each step contributes
+   viewport-relative boxes to `CaptureResult.redactions` (with `stepIndex`) so the
+   renderer blurs that region during that step's time window.
+3. **Text** — `StepRecord.value` becomes `••••` for sensitive fields, and
+   `log[]` lines are scrubbed of bearer tokens / API keys before reaching the
+   dashboard.
+
+Automatic targets (`options.redactSensitive`, default **true**): `input[type=password]`,
+`autocomplete` starting `cc-` or `one-time-code`, and any `input`/`textarea` whose
+`name` / `id` / `data-testid` matches `card`, `cc-`, `cvv`, `cvc`, `ssn`, `secret`,
+`token`, `api[-_]?key` or `passw`. Add `options.redactSelectors: ['.sensitive']` for
+anything else (any CSS selector; invalid ones are logged and ignored, never fatal).
+
+`redactions` are **one entry per on-screen box per step**, deduped within a step and
+**never collapsed across steps**: a renderer that blurs each entry only inside its
+step's window would silently un-blur a field that is still visible in later steps —
+the exact failure mode this feature exists to prevent. Contiguous steps sharing a
+box can be merged into one continuous blur interval by the renderer, and a step
+with no entry ends the interval. Boxes are clamped to the 1280×720 viewport
+(half-visible fields still get masked) and stored in the same CSS-px space as
+`StepRecord.box`.
+
+`input[type=password]` is redacted from `StepRecord.value` even when
+`redactSensitive: false` — that switch turns off masking, not credential hygiene.
+
+Known gaps: closed shadow roots (no API can see inside), cross-origin iframes, and
+values painted into `<canvas>` are not observable by the DOM scan. Open shadow
+roots are traversed.
+
 ## Verification
 
 ```powershell
@@ -72,6 +112,12 @@ node packages/agent/scripts/verify-overlay.ts
 
 # 3. destructive gate, step budget, TARGET_UNREACHABLE, LLM parse/validate/fallback
 node packages/agent/scripts/verify-guards.ts
+
+# 4. privacy redaction: masked PNGs (pixel-checked), redaction boxes, values, logs
+node packages/agent/scripts/verify-redaction.ts
+
+# 5. credentials typed on camera + password masked in the signed-in flow
+node packages/agent/scripts/verify-credentials.ts
 
 # typecheck just this package
 node node_modules/typescript/bin/tsc -p packages/agent/tsconfig.json --noEmit

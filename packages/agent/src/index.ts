@@ -28,5 +28,19 @@ export type { ObserveOptions } from './observer.ts';
 
 export { CURSOR_INIT_SCRIPT, INIT_SCRIPT } from './injected.ts';
 
+export {
+  REDACTED_VALUE,
+  MASK_COLOR,
+  redactionOptionsFrom,
+  sensitiveSelectorGroups,
+  collectRedactionTargets,
+  redactionBoxesForStep,
+  clampToViewport,
+  isSensitiveTarget,
+  redactValue,
+  scrubSecrets
+} from './redaction.ts';
+export type { RedactionOptions, RedactionTarget } from './redaction.ts';
+
 export { createNarrator, templateOnlyNarrator, templateNarration, cleanNarration, isUsableNarration } from './narration.ts';
 export type { Narrator, NarratorConfig, LlmSettings } from './narration.ts';
