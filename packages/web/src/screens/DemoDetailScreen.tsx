@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { DemoFailure, DemoOutcome, DemoQuestion, NarrationLine } from '@core';
 import { api, apiV2, isApiError, isNetworkError } from '../api.ts';
 import type { CreateDemoBody } from '../api.ts';
@@ -23,6 +23,7 @@ import {
   EmptyState,
   ErrorPanel,
   KeyValue,
+  Pill,
   Progress,
   SkeletonRows,
   Tabs
@@ -60,6 +61,15 @@ export function DemoDetailScreen({ id }: { id: string }) {
   const steps = data?.steps ?? [];
   const percent = status === 'complete' ? 100 : toPercent(data?.progress);
 
+  /** The stored request options; older rows nest them under `options`. */
+  const storedOptions = useMemo(() => {
+    const parsed = parseJsonField<Record<string, unknown>>(data?.options_json);
+    if (!parsed) return {} as Record<string, unknown>;
+    const nested = parsed.options;
+    return nested && typeof nested === 'object' ? (nested as Record<string, unknown>) : parsed;
+  }, [data?.options_json]);
+  const aspect = typeof storedOptions.aspect === 'string' && storedOptions.aspect ? storedOptions.aspect : '16:9';
+
   async function answer(optionId: string) {
     setAnswering(optionId);
     setActionError(null);
@@ -92,7 +102,6 @@ export function DemoDetailScreen({ id }: { id: string }) {
     setBusy('retry');
     setActionError(null);
     try {
-      const storedOptions = parseJsonField<Record<string, unknown>>(data.options_json) ?? {};
       const body: CreateDemoBody = {
         instruction: data.instruction,
         authorized: true,
@@ -151,6 +160,14 @@ export function DemoDetailScreen({ id }: { id: string }) {
         <div style={{ minWidth: 0 }}>
           <div className="row wrap" style={{ marginBottom: 8 }}>
             <DemoStatusPill status={data.status} />
+            {aspect !== '16:9' ? (
+              <>
+                <span className="hint dotsep" />
+                <span title={`Output framing ${aspect}`}>
+                  <Pill tone="neutral">{aspect}</Pill>
+                </span>
+              </>
+            ) : null}
             <span className="hint">created {formatRelative(data.created_at)}</span>
             {data.duration_ms ? (
               <>
@@ -167,10 +184,10 @@ export function DemoDetailScreen({ id }: { id: string }) {
             {data.instruction}
           </h1>
           <p className="page-sub mono" style={{ fontSize: 12 }}>
-            {data.id} Â· {data.target_type} target
+            {data.id} · {data.target_type} target
           </p>
         </div>
-        <div className="row" style={{ flexShrink: 0 }}>
+        <div className="row wrap" style={{ flexShrink: 0, justifyContent: 'flex-end', maxWidth: '58%' }}>
           <OutputActions demoId={data.id} status={data.status} />
           {running ? (
             <button type="button" className="btn btn-danger" onClick={cancel} disabled={busy !== null}>
@@ -242,7 +259,7 @@ export function DemoDetailScreen({ id }: { id: string }) {
               <div className="card-body stack">
                 <Banner tone="info" title="The run is complete but no video URL was returned">
                   <p>
-                    The API signs video URLs on read. If this stays empty, the render output or the signing secret is missing â€” check{' '}
+                    The API signs video URLs on read. If this stays empty, the render output or the signing secret is missing — check{' '}
                     <code>GET /api/demos/{data.id}</code> in the Raw tab.
                   </p>
                   <div className="banner-actions">
@@ -375,7 +392,7 @@ export function DemoDetailScreen({ id }: { id: string }) {
                     body={
                       running
                         ? 'Steps appear here as the browser agent performs them, with a screenshot thumbnail and the selector it used.'
-                        : 'A run with zero steps usually means the planner never reached the page â€” check the failure panel above.'
+                        : 'A run with zero steps usually means the planner never reached the page — check the failure panel above.'
                     }
                   />
                 ) : (
@@ -386,10 +403,10 @@ export function DemoDetailScreen({ id }: { id: string }) {
                           <span className="step-idx">{step.idx}</span>
                           <span className="step-kind">{step.kind}</span>
                           <div className="step-narration">
-                            <div>{step.narration || <span className="dim">â€”</span>}</div>
+                            <div>{step.narration || <span className="dim">—</span>}</div>
                             <div className="step-sel" title={step.selector ?? undefined}>
-                              {step.selector ?? step.role ?? 'â€”'}
-                              {step.url ? ` Â· ${hostOf(step.url)}` : ''}
+                              {step.selector ?? step.role ?? '—'}
+                              {step.url ? ` · ${hostOf(step.url)}` : ''}
                             </div>
                           </div>
                           {step.screenshotUrl ? (
@@ -438,7 +455,7 @@ export function DemoDetailScreen({ id }: { id: string }) {
                             <div>
                               <div>{line.text}</div>
                               <div className="hint">
-                                step {line.stepIndex} Â· {formatDuration(line.durationMs)} of audio
+                                step {line.stepIndex} · {formatDuration(line.durationMs)} of audio
                               </div>
                             </div>
                           </div>
@@ -465,6 +482,7 @@ export function DemoDetailScreen({ id }: { id: string }) {
               rows={[
                 { key: 'Status', value: <DemoStatusPill status={data.status} /> },
                 { key: 'Progress', value: <span className="num">{percent}%</span> },
+                { key: 'Framing', value: <span className="mono">{aspect}</span> },
                 { key: 'Duration', value: <span className="num">{formatDuration(data.duration_ms)}</span> },
                 { key: 'Credits', value: <span className="num">{formatNumber(data.credits_used)}</span> },
                 { key: 'Steps', value: <span className="num">{formatNumber(steps.length)}</span> },
@@ -527,16 +545,19 @@ function Stat({ label, value, hint }: { label: string; value: string; hint?: str
 
 /**
  * Share and export actions for a finished demo: a public share link, a GIF
- * preview for chat, and WebVTT captions. Each feature degrades to a disabled
- * button (with a reason) when the API does not offer it.
+ * preview for chat, WebVTT captions and the interactive walkthrough player.
+ * Each feature degrades to a disabled button (with a reason) when the API does
+ * not offer it.
  */
 function OutputActions({ demoId, status }: { demoId: string; status: string }) {
   const ready = status === 'complete';
   const { copied, copy } = useCopy();
   const [exports, setExports] = useState<Record<string, { status: string; url?: string | null }>>({});
-  const [busy, setBusy] = useState<'share' | 'gif' | 'vtt' | null>(null);
+  const [busy, setBusy] = useState<'share' | 'gif' | 'vtt' | 'walkthrough' | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [unsupported, setUnsupported] = useState(false);
+
+  const walkthroughUrl = exports.walkthrough?.url ?? null;
 
   useEffect(() => {
     if (!ready) return;
@@ -607,6 +628,43 @@ function OutputActions({ demoId, status }: { demoId: string; status: string }) {
 
   const disabledReason = !ready ? 'Available once the demo finishes.' : unsupported ? 'Not enabled on this deployment.' : undefined;
 
+  async function openWalkthrough() {
+    if (walkthroughUrl) {
+      window.open(walkthroughUrl, '_blank', 'noopener');
+      return;
+    }
+    setBusy('walkthrough');
+    setNotice(null);
+    try {
+      await apiV2.exports.requestWalkthrough(demoId);
+      for (let attempt = 0; attempt < 24; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        const list = await apiV2.exports.list(demoId);
+        const match = list.find((item) => item.kind === 'walkthrough');
+        if (!match) continue;
+        setExports((current) => ({ ...current, walkthrough: { status: match.status, url: match.url } }));
+        if (match.status === 'complete' && match.url) {
+          window.open(match.url, '_blank', 'noopener');
+          setNotice('Walkthrough ready.');
+          return;
+        }
+        if (match.status === 'failed') throw new Error('The walkthrough export failed.');
+      }
+      setNotice('Still building the walkthrough — try again in a moment.');
+    } catch (error) {
+      if (isApiError(error) && (error.status === 404 || error.status === 501)) setUnsupported(true);
+      setNotice(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  function copyWalkthroughLink() {
+    if (!walkthroughUrl) return;
+    copy(walkthroughUrl);
+    setNotice('Walkthrough link copied.');
+  }
+
   return (
     <div className="output-actions">
       <button
@@ -638,6 +696,26 @@ function OutputActions({ demoId, status }: { demoId: string; status: string }) {
       >
         <Icon name="terminal" size={14} />
         {busy === 'vtt' ? 'Rendering…' : 'Captions'}
+      </button>
+      <button
+        type="button"
+        className="btn btn-ghost btn-sm"
+        onClick={openWalkthrough}
+        disabled={!ready || unsupported || busy !== null}
+        title={disabledReason ?? (walkthroughUrl ? 'Open the interactive walkthrough' : 'Build an interactive walkthrough from this run')}
+      >
+        <Icon name="spark" size={14} />
+        {busy === 'walkthrough' ? 'Building…' : 'Walkthrough'}
+      </button>
+      <button
+        type="button"
+        className="btn btn-ghost btn-sm"
+        onClick={copyWalkthroughLink}
+        disabled={!ready || !walkthroughUrl || busy !== null}
+        title={walkthroughUrl ? 'Copy the walkthrough link' : disabledReason ?? 'Available once a walkthrough has been built.'}
+      >
+        <Icon name="copy" size={14} />
+        Copy walkthrough link
       </button>
       {notice ? <span className="hint">{notice}</span> : null}
     </div>

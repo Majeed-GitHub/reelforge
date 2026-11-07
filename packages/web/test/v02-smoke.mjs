@@ -40,7 +40,17 @@ function check(name, condition, detail = '') {
 // ---------------------------------------------------------------------------
 // Mock API speaking the v0.2 contract
 // ---------------------------------------------------------------------------
-const calls = { savedProvider: null, savedTts: null, savedWebhook: null, tested: null, exportKinds: [] };
+const calls = {
+  savedProvider: null,
+  savedTts: null,
+  savedWebhook: null,
+  tested: null,
+  exportKinds: [],
+  demoBodies: [],
+  walkthroughRequests: 0,
+  walkthroughPolls: 0,
+  walkthroughRequested: false
+};
 
 const providers = [
   { id: 'gmi', label: 'GMI Cloud', baseUrl: 'https://api.gmi-serving.com/v1', requiresKey: true, defaultModel: '', helpUrl: 'https://www.gmicloud.ai/', note: 'OpenAI-compatible inference.', configured: false, source: 'none', keyHint: null, model: null },
@@ -90,6 +100,44 @@ const demo = {
   pollAfterSeconds: null
 };
 
+/** A social-framed run: the header must surface the 9:16 pill. */
+const verticalDemo = {
+  ...demo,
+  id: 'dem_vertical',
+  instruction: 'Record a vertical walkthrough of the upgrade flow.',
+  duration_ms: 18300,
+  options_json: JSON.stringify({ options: { language: 'en', fps: 30, aspect: '9:16', redactSensitive: true } })
+};
+
+/** A deployment whose API has no walkthrough export (POST answers 501). */
+const noWalkthroughDemo = {
+  ...demo,
+  id: 'dem_nowalk',
+  instruction: 'A demo recorded on a deployment without walkthroughs.'
+};
+
+/** The demo a submitted form creates: queued, so every output action is off. */
+const queuedDemo = {
+  ...demo,
+  id: 'dem_new',
+  status: 'queued',
+  progress: 0,
+  duration_ms: null,
+  videoUrl: null,
+  posterUrl: null,
+  outcome_json: null,
+  options_json: JSON.stringify({
+    language: 'en',
+    fps: 30,
+    maxSteps: 40,
+    watermark: true,
+    zoom: 1.6,
+    aspect: '16:9',
+    redactSensitive: true
+  }),
+  created_at: new Date().toISOString()
+};
+
 function json(res, code, body) {
   res.writeHead(code, { 'content-type': 'application/json' });
   res.end(JSON.stringify(body));
@@ -137,13 +185,50 @@ const server = http.createServer(async (req, res) => {
   if (p === '/api/api-keys') return json(res, 200, { data: [{ id: 'key_1', name: 'default', prefix: 'rg_ab12', created_at: new Date().toISOString(), last_used_at: new Date().toISOString(), revoked_at: null }] });
   if (p === '/api/presets/voices') return json(res, 200, { data: { voices: ['Microsoft Zira Desktop', 'Microsoft David Desktop'] } });
   if (p === '/api/demos' && req.method === 'GET') return json(res, 200, { data: [demo] });
+  if (p === '/api/demos' && req.method === 'POST') {
+    calls.demoBodies.push(payload);
+    return json(res, 200, { message: 'Queued.', data: { id: 'dem_new', status: 'queued', pollAfterSeconds: 1 } });
+  }
   if (p === '/api/demos/dem_v02') return json(res, 200, { data: demo });
+  if (p === '/api/demos/dem_vertical') return json(res, 200, { data: verticalDemo });
+  if (p === '/api/demos/dem_nowalk') return json(res, 200, { data: noWalkthroughDemo });
+  if (p === '/api/demos/dem_new') return json(res, 200, { data: queuedDemo });
   if (p === '/api/demos/dem_v02/exports' && req.method === 'GET') {
-    return json(res, 200, { data: { exports: calls.exportKinds.map((kind) => ({ id: `exp_${kind}`, kind, status: 'complete', url: `/api/files/mock-${kind}-token`, bytes: 12345 })) } });
+    const list = calls.exportKinds.map((kind) => ({
+      id: `exp_${kind}`,
+      kind,
+      status: 'complete',
+      url: `/api/files/mock-${kind}-token`,
+      bytes: 12345
+    }));
+    // The walkthrough is built asynchronously: queued on the first poll,
+    // complete (with a url) on the second — exactly what the UI polls for.
+    if (calls.walkthroughRequested) {
+      calls.walkthroughPolls += 1;
+      const complete = calls.walkthroughPolls >= 2;
+      list.push({
+        id: 'exp_walkthrough',
+        kind: 'walkthrough',
+        status: complete ? 'complete' : 'queued',
+        url: complete ? '/api/files/mock-walkthrough-token' : null,
+        bytes: complete ? 65432 : null
+      });
+    }
+    return json(res, 200, { data: { exports: list } });
   }
   if (p === '/api/demos/dem_v02/exports' && req.method === 'POST') {
     calls.exportKinds.push(payload.kind);
     return json(res, 200, { data: { id: `exp_${payload.kind}`, kind: payload.kind, status: 'queued' } });
+  }
+  if (p === '/api/demos/dem_v02/walkthrough' && req.method === 'POST') {
+    calls.walkthroughRequests += 1;
+    calls.walkthroughRequested = true;
+    calls.walkthroughPolls = 0;
+    return json(res, 200, { message: 'Queued.', data: { id: 'exp_walkthrough', kind: 'walkthrough', status: 'queued' } });
+  }
+  if (p === '/api/demos/dem_nowalk/exports' && req.method === 'GET') return json(res, 200, { data: { exports: [] } });
+  if (p === '/api/demos/dem_nowalk/walkthrough' && req.method === 'POST') {
+    return json(res, 501, { code: 'NOT_IMPLEMENTED', message: 'Walkthrough export is not enabled on this deployment.' });
   }
   if (p === '/api/demos/dem_v02/share') return json(res, 200, { data: { url: 'https://example.test/api/share/mock-token', expiresAt: new Date(Date.now() + 86400000).toISOString() } });
 
@@ -174,6 +259,20 @@ await context.addInitScript(() => {
 const page = await context.newPage();
 const errors = [];
 page.on('pageerror', (error) => errors.push(String(error)));
+
+/** Fill and submit the new-demo form, returning the request body the API saw. */
+async function submitDemo({ aspect = null, redact = null } = {}) {
+  await page.goto(`${base}/app/#/demos/new`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('#instruction', { timeout: 15000 });
+  if (aspect) await page.locator('.aspect-option', { hasText: aspect }).click();
+  const redactBox = page.locator('.checkrow', { hasText: 'Mask passwords, card numbers and API keys' }).locator('input');
+  if (redact === true) await redactBox.check();
+  if (redact === false) await redactBox.uncheck();
+  await page.fill('#instruction', 'Create a project, then invite a teammate.');
+  await page.getByRole('button', { name: 'Record demo', exact: true }).click();
+  await page.waitForFunction(() => location.hash.includes('dem_new'), undefined, { timeout: 10000 });
+  return calls.demoBodies.at(-1);
+}
 
 try {
   // ---------------------------------------------------------------- settings
@@ -231,6 +330,118 @@ try {
   await page.waitForTimeout(2200);
   check('demo: GIF export requested with the right kind', calls.exportKinds.includes('gif'), calls.exportKinds.join(','));
   await page.screenshot({ path: path.join(artifacts, 'v02-demo-actions.png'), fullPage: false });
+
+  // ------------------------------------------- v0.3: output framing + privacy
+  await page.goto(`${base}/app/#/demos/new`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('#instruction');
+  const aspectOptions = page.locator('.aspect-option');
+  check('v0.3: new demo offers four output framings', (await aspectOptions.count()) === 4, `${await aspectOptions.count()} option(s)`);
+  check(
+    'v0.3: 16:9 is the default framing',
+    (await page.locator('.aspect-option[aria-pressed="true"]').innerText()).includes('16:9'),
+    await page.locator('.aspect-option[aria-pressed="true"]').innerText()
+  );
+  const redactBox = page.locator('.checkrow', { hasText: 'Mask passwords, card numbers and API keys' }).locator('input');
+  check('v0.3: sensitive-data masking is on by default', await redactBox.isChecked());
+  check(
+    'v0.3: framing control fits the form without horizontal overflow',
+    await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)
+  );
+  const aspectWidths = await page
+    .locator('.aspect-option')
+    .evaluateAll((nodes) => nodes.map((node) => Math.round(node.getBoundingClientRect().width)));
+  check(
+    'v0.3: framing renders as four equal segments',
+    new Set(aspectWidths).size === 1 && aspectWidths[0] > 60,
+    aspectWidths.join(',')
+  );
+  check(
+    'v0.3: privacy copy explains screenshots and video blur',
+    (await page.locator('text=Screenshots are masked; the video blurs those regions while they are on screen.').count()) > 0
+  );
+
+  await page.locator('.aspect-option', { hasText: '9:16' }).click();
+  await page.screenshot({ path: path.join(artifacts, 'v03-new-demo.png'), fullPage: true });
+
+  const body16 = await submitDemo({ aspect: '16:9' });
+  check('v0.3: 16:9 framing sent as options.aspect', body16?.options?.aspect === '16:9', String(body16?.options?.aspect));
+  check('v0.3: redaction on by default is sent as options.redactSensitive', body16?.options?.redactSensitive === true, String(body16?.options?.redactSensitive));
+
+  const bodyUnredacted = await submitDemo({ aspect: '16:9', redact: false });
+  check(
+    'v0.3: unchecking privacy sends redactSensitive=false',
+    bodyUnredacted?.options?.redactSensitive === false,
+    String(bodyUnredacted?.options?.redactSensitive)
+  );
+
+  const body916 = await submitDemo({ aspect: '9:16' });
+  check('v0.3: 9:16 framing sent as options.aspect', body916?.options?.aspect === '9:16', String(body916?.options?.aspect));
+  const body11 = await submitDemo({ aspect: '1:1' });
+  check('v0.3: 1:1 framing sent as options.aspect', body11?.options?.aspect === '1:1', String(body11?.options?.aspect));
+  const body45 = await submitDemo({ aspect: '4:5' });
+  check('v0.3: 4:5 framing sent as options.aspect', body45?.options?.aspect === '4:5', String(body45?.options?.aspect));
+
+  // --------------------------------------------- v0.3: aspect pill on detail
+  await page.goto(`${base}/app/#/demos/dem_v02`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('text=Share');
+  const landscapeHead = await page.locator('.page-head').innerText();
+  check('v0.3: 16:9 runs show no aspect pill', !landscapeHead.includes('9:16') && !landscapeHead.includes('16:9'), landscapeHead.replace(/\s+/g, ' '));
+
+  await page.goto(`${base}/app/#/demos/dem_vertical`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('text=Share');
+  const verticalPill = page.locator('.page-head .pill').filter({ hasText: '9:16' });
+  check('v0.3: non-16:9 run shows its aspect as a pill', (await verticalPill.count()) === 1);
+
+  // -------------------------------------- v0.3: interactive walkthrough export
+  await page.goto(`${base}/app/#/demos/dem_v02`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('text=Share');
+  const walkthroughBtn = page.getByRole('button', { name: 'Walkthrough', exact: true });
+  const copyWalkthroughBtn = page.getByRole('button', { name: 'Copy walkthrough link', exact: true });
+  check(
+    'v0.3: detail header fits five output actions without overflow',
+    await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)
+  );
+  check(
+    'v0.3: walkthrough actions sit with share / GIF / captions',
+    (await walkthroughBtn.count()) === 1 && (await copyWalkthroughBtn.count()) === 1
+  );
+  check('v0.3: copy walkthrough link is disabled before a build', await copyWalkthroughBtn.isDisabled());
+
+  await walkthroughBtn.click();
+  await page.waitForFunction(() => {
+    const button = Array.from(document.querySelectorAll('button')).find(
+      (element) => element.textContent?.trim() === 'Copy walkthrough link'
+    );
+    return !!button && !button.disabled;
+  }, undefined, { timeout: 15000 });
+  check('v0.3: walkthrough POST requested once', calls.walkthroughRequests === 1, String(calls.walkthroughRequests));
+  check('v0.3: walkthrough button enables after polling finds the url', await copyWalkthroughBtn.isEnabled());
+  await page.screenshot({ path: path.join(artifacts, 'v03-walkthrough.png'), fullPage: false });
+
+  await copyWalkthroughBtn.click();
+  await page.waitForSelector('text=Walkthrough link copied.', { timeout: 5000 });
+  check('v0.3: copying the walkthrough link confirms', true);
+
+  // ------------------------------- v0.3: unsupported + unfinished degradation
+  await page.goto(`${base}/app/#/demos/dem_nowalk`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('text=Share');
+  await page.getByRole('button', { name: 'Walkthrough', exact: true }).click();
+  await page.waitForFunction(() => {
+    const button = Array.from(document.querySelectorAll('button')).find((element) => element.textContent?.trim() === 'Walkthrough');
+    return !!button && button.disabled && (button.getAttribute('title') || '').includes('Not enabled');
+  }, undefined, { timeout: 10000 });
+  check('v0.3: a 501 walkthrough endpoint disables the action', await page.getByRole('button', { name: 'Walkthrough', exact: true }).isDisabled());
+  const unsupportedTitle = await page.getByRole('button', { name: 'Walkthrough', exact: true }).getAttribute('title');
+  check('v0.3: the disabled walkthrough explains why', (unsupportedTitle ?? '').includes('Not enabled on this deployment'), unsupportedTitle ?? '');
+
+  await page.goto(`${base}/app/#/demos/dem_new`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('text=Share');
+  const pendingTitle = await page.getByRole('button', { name: 'Walkthrough', exact: true }).getAttribute('title');
+  check(
+    'v0.3: walkthrough waits for a finished demo',
+    (await page.getByRole('button', { name: 'Walkthrough', exact: true }).isDisabled()) && (pendingTitle ?? '').includes('once the demo finishes'),
+    pendingTitle ?? ''
+  );
 
   // ---------------------------------------------------------------- onboard
   const fresh = await browser.newContext({ viewport: { width: 1280, height: 900 } });

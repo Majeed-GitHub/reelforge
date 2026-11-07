@@ -559,7 +559,7 @@ export type ProviderTestResult = {
   error?: string | null;
 };
 
-export type ExportKind = 'gif' | 'vtt';
+export type ExportKind = 'gif' | 'vtt' | 'walkthrough';
 export type DemoExport = {
   id: string;
   kind: ExportKind | string;
@@ -622,6 +622,18 @@ export const apiV2 = {
     async request(demoId: string, kind: ExportKind): Promise<DemoExport> {
       const data = asRecord(await request<unknown>(`/demos/${encodeURIComponent(demoId)}/exports`, { method: 'POST', body: { kind } }));
       return { id: String(data.id ?? ''), kind, status: String(data.status ?? 'queued') };
+    },
+
+    /**
+     * Builds the interactive walkthrough (a standalone HTML player for the
+     * recorded steps). Progress is reported through list() as kind
+     * 'walkthrough'; the ready row carries the url to open.
+     */
+    async requestWalkthrough(demoId: string): Promise<DemoExport> {
+      const data = asRecord(
+        await request<unknown>(`/demos/${encodeURIComponent(demoId)}/walkthrough`, { method: 'POST', body: {} })
+      );
+      return { id: String(data.id ?? ''), kind: 'walkthrough', status: String(data.status ?? 'queued') };
     }
   },
 

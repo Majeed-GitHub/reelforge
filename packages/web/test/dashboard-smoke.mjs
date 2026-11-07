@@ -863,6 +863,8 @@ try {
     assert.equal(body.options.maxSteps, 40);
     assert.equal(body.options.zoom, 1.6);
     assert.equal(body.options.watermark, true);
+    assert.equal(body.options.aspect, '16:9');
+    assert.equal(body.options.redactSensitive, true);
     await page.getByText(/Recording/).first().waitFor();
   });
 

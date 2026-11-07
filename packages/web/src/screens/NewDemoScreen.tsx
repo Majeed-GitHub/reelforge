@@ -1,6 +1,6 @@
 import type { FormEvent } from 'react';
 import { useEffect, useState } from 'react';
-import type { EnvironmentRow, PresetRow, SignInMode } from '@core';
+import type { AspectRatio, EnvironmentRow, PresetRow, SignInMode } from '@core';
 import { api, isApiError } from '../api.ts';
 import type { CreateDemoBody } from '../api.ts';
 import { hostOf, truncate } from '../format.ts';
@@ -18,6 +18,14 @@ const LANGUAGES = [
   { value: 'ja', label: 'Japanese (ja)' },
   { value: 'pt', label: 'Portuguese (pt)' },
   { value: 'it', label: 'Italian (it)' }
+];
+
+/** 16:9 is the native capture; the rest reframe it over a blurred backdrop. */
+const ASPECTS: Array<{ value: AspectRatio; note: string }> = [
+  { value: '16:9', note: 'Screen' },
+  { value: '9:16', note: 'Reels / Shorts' },
+  { value: '1:1', note: 'Square' },
+  { value: '4:5', note: 'Feed' }
 ];
 
 const EXAMPLES = [
@@ -52,6 +60,8 @@ export function NewDemoScreen() {
   const [maxSteps, setMaxSteps] = useState(40);
   const [watermark, setWatermark] = useState(true);
   const [zoom, setZoom] = useState(1.6);
+  const [aspect, setAspect] = useState<AspectRatio>('16:9');
+  const [redactSensitive, setRedactSensitive] = useState(true);
   const [presetId, setPresetId] = useState('');
   const [authorized, setAuthorized] = useState(false);
   const [confirmDestructive, setConfirmDestructive] = useState(false);
@@ -95,7 +105,9 @@ export function NewDemoScreen() {
       fps,
       maxSteps,
       watermark,
-      zoom
+      zoom,
+      aspect,
+      redactSensitive
     };
     if (presetId) options.presetId = presetId;
 
@@ -297,6 +309,31 @@ export function NewDemoScreen() {
                 <span className="hint">Defaults are production-safe</span>
               </div>
               <div className="card-body stack">
+                <div className="field">
+                  <span className="label" id="opt-aspect-label">
+                    Output framing
+                  </span>
+                  <div className="seg aspect-seg" role="group" aria-labelledby="opt-aspect-label">
+                    {ASPECTS.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        className="seg-btn aspect-option"
+                        aria-pressed={aspect === option.value}
+                        onClick={() => setAspect(option.value)}
+                        title={`${option.value} — ${option.note}`}
+                      >
+                        <span className="aspect-ratio">{option.value}</span>
+                        <span className="aspect-note">{option.note}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <p className="hint">
+                    16:9 is the native screen capture; the other ratios reframe it over a blurred copy of the frame for Reels, Shorts
+                    and feed posts.
+                  </p>
+                </div>
+
                 <div className="grid-3">
                   <Field label="Narration language" htmlFor="opt-language" hint="Voice and captions.">
                     <select id="opt-language" className="select" value={language} onChange={(event) => setLanguage(event.target.value)}>
@@ -359,6 +396,16 @@ export function NewDemoScreen() {
                       ))}
                     </select>
                   </Field>
+                </div>
+
+                <div className="privacy-block">
+                  <span className="eyebrow">Privacy</span>
+                  <CheckRow
+                    checked={redactSensitive}
+                    onChange={setRedactSensitive}
+                    title="Mask passwords, card numbers and API keys"
+                    hint="Screenshots are masked; the video blurs those regions while they are on screen."
+                  />
                 </div>
 
                 <div className="grid-2">
