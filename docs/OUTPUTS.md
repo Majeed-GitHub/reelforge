@@ -1,10 +1,10 @@
-# Reelforge outputs — video, articles, GIFs, captions, share pages, webhooks
+# Reelforge outputs — video, articles, GIFs, captions, share pages, webhooks, walkthroughs
 
 Reelforge turns one recording into more than a video. This document covers
 everything a demo produces once it reaches `complete`, and how to get it out of
 the instance: **webhooks (including Slack)**, **public share pages**, **GIF
-previews**, **WebVTT captions**, plus the video/article/guide that already ship
-in v0.1.
+previews**, **WebVTT captions**, **clickable walkthroughs**, plus the
+video/article/guide that already ship in v0.1.
 
 ```
 POST /api/demos
@@ -17,13 +17,15 @@ POST /api/demos
       ├─ POST /api/demos/:id/exports { kind: "gif" }  ──► looping preview GIF
       ├─ POST /api/demos/:id/exports { kind: "vtt" }  ──► WebVTT captions
       ├─ GET  /api/demos/:id/share                     ──► 30-day public page
+      ├─ POST /api/demos/:id/walkthrough               ──► one self-contained HTML walkthrough
       └─ demo.complete / demo.failed                   ──► webhook POST
 ```
 
-All media (video, poster, GIF, VTT) is served from the same signed-URL
-mechanism: `GET /api/files/<token>`, HMAC-SHA256 over `{ path, expiry }` with the
-instance's local secret, **1 hour** TTL, no API key needed (a `<video src>`
-cannot send headers). Share pages re-sign those media URLs on every page load.
+All media (video, poster, GIF, VTT, walkthrough HTML) is served from the same
+signed-URL mechanism: `GET /api/files/<token>`, HMAC-SHA256 over
+`{ path, expiry }` with the instance's local secret, **1 hour** TTL, no API key
+needed (a `<video src>` cannot send headers). Share pages re-sign those media
+URLs on every page load.
 
 ---
 
@@ -376,7 +378,103 @@ not on `hooks.slack.com` and receive the normal event body.
 
 ---
 
-## API summary (v0.2 outputs)
+## 7. Clickable walkthrough
+
+The one output Director explicitly does not have: the same capture — step
+screenshots, element boxes, narration — turned into an **interactive
+click-through demo**. Every step shows the real screenshot with a pulsing
+hotspot over the element that was actually clicked, the narration as its
+tooltip, and a `3 / 11` progress bar.
+
+### Request
+
+```bash
+curl -X POST http://127.0.0.1:4400/api/demos/$DEMO_ID/walkthrough \
+  -H "X-API-Key: $REELFORGE_API_KEY" -H "Content-Type: application/json" -d '{}'
+# → { "message": "Walkthrough generated — 11 steps, 322 KB, one self-contained file.",
+#     "data": { "url": "http://127.0.0.1:4400/api/walkthrough/<token>",
+#               "bytes": 329196, "steps": 11 } }
+```
+
+| Field | Meaning |
+|---|---|
+| `url` | Public, 90-day HMAC-signed URL. No API key needed. |
+| `bytes` | Size of the generated HTML file. |
+| `steps` | Number of recorded steps covered. |
+
+A demo that is not `complete`, or has no recorded steps, returns **409** with
+the normal error envelope.
+
+### One file, no server
+
+The output is `data/exports/<demoId>/walkthrough-<exportId>.html`:
+
+- inline CSS and inline JS — no framework, no build step at view time;
+- every step screenshot embedded as a base64 `data:image/png` URI;
+- no `<script src>`, no `<link href>`, no web fonts, no CDNs, no relative
+  assets;
+- a CSP meta tag (`default-src 'none'; img-src data:; style-src
+  'unsafe-inline'; script-src 'unsafe-inline'`) makes the promise enforceable
+  by the browser.
+
+So it can be emailed as an attachment, dropped on any static host, attached to a
+ticket, or opened straight from disk (`file://`) with no network at all.
+
+**Size budget.** 11 screenshots at 1280×720 come to ~320 KiB. The generator logs
+a warning if a file exceeds **8 MB** and still returns it — there is no hard
+failure.
+
+### Interaction
+
+| Action | Result |
+|---|---|
+| Click the pulsing hotspot | next step |
+| Click anywhere on the image when that step recorded no box | next step |
+| `Next` / `Back` buttons | next / previous |
+| `→` / `↓` / `PageDown` | next |
+| `←` / `↑` / `PageUp` | previous |
+| `Esc` (or `Home`) | close the walkthrough (back to the title screen) |
+| `Start` / `Restart` | begin at step 1 |
+
+The title screen shows the instruction, step count, duration and recording date.
+Progress is `3 / 11` plus a filled bar (`role="progressbar"` with
+`aria-valuenow`); a polite live region announces each step and its narration;
+focus moves to the current hotspot, so the walkthrough is fully keyboard-operable;
+and `prefers-reduced-motion: reduce` disables the pulsing ring and transitions.
+
+### Honest degradation
+
+- **No screenshot** for a step → a text card with the narration and a
+  "click to continue" affordance.
+- **No box** for a step (e.g. the final wait/verification step) → the whole
+  screenshot becomes the click target, outlined with a dashed border.
+- **No narration** → the step still appears, labelled `Step N`.
+
+### Public link + first-class export
+
+`GET /api/walkthrough/:token` serves the file with **no API key**; invalid or
+expired tokens get a rendered HTML 404 page. The token is an HMAC claim over one
+`demo_exports` row id, so it cannot read anything else; rotating `data/.secret`
+invalidates it.
+
+Each generated walkthrough is recorded in `demo_exports` with
+`kind: "walkthrough"`, so it appears in the existing exports list and the
+dashboard can offer it next to GIF/VTT:
+
+```bash
+curl http://127.0.0.1:4400/api/demos/$DEMO_ID/exports -H "X-API-Key: $REELFORGE_API_KEY"
+# → { "data": { "exports": [ …,
+#       { "id": "exp_…", "kind": "walkthrough", "status": "complete",
+#         "url": "/api/files/<signed>", "bytes": 329196 } ] } }
+```
+
+That `url` is the standard 1-hour signed media path (`.html` is served as
+`text/html`, so it opens directly in a new tab). Use the `url` from the POST
+response when you need a link that keeps working for longer than an hour.
+
+---
+
+## API summary (v0.2 + v0.3 outputs)
 
 | Method | Path | Auth | Body / result |
 |---|---|---|---|
@@ -384,11 +482,13 @@ not on `hooks.slack.com` and receive the normal event body.
 | `GET` | `/api/demos/:id/exports` | yes | → `{ exports: [ { id, kind, status, url, bytes } ] }` |
 | `GET` | `/api/demos/:id/share` | yes | → `{ url, expiresAt }` |
 | `GET` | `/api/share/:token` | **no** | self-contained HTML page |
+| `POST` | `/api/demos/:id/walkthrough` | yes | `{}` → `{ url, bytes, steps }` |
+| `GET` | `/api/walkthrough/:token` | **no** | self-contained HTML walkthrough (90-day token) |
 | `GET` | `/api/webhooks` | yes | → `{ url, hasSecret, lastDelivery }` |
 | `POST` | `/api/webhooks` | yes | `{ url, secret? }` → `{ url, hasSecret, lastDelivery }` |
 | `DELETE` | `/api/webhooks` | yes | → `{ url: null, hasSecret: false, lastDelivery: null }` |
 | `POST` | `/api/webhooks/test` | yes | `{}` → `{ delivered, status, latencyMs }` |
-| `GET` | `/api/files/:token` | **no** | signed media (mp4, png, gif, vtt, …) |
+| `GET` | `/api/files/:token` | **no** | signed media (mp4, png, gif, vtt, html, …) |
 
 Error responses are always the standard envelope:
 `{ "code": …, "message": …, "remediation": { "action": …, "hint": … } }`.
@@ -399,8 +499,13 @@ Error responses are always the standard envelope:
   `published_url` when a helpdesk sync set one, otherwise to the dashboard
   (which needs a key). Articles themselves are not exposed publicly.
 - **GIF audio.** GIF has none; the preview is silent by design.
-- **Arbitrary `kind`s.** Only `gif` and `vtt` exist; unknown kinds return 501 so
-  clients can feature-gate.
+- **Export `kind`s stay a closed set.** `POST /api/demos/:id/exports` accepts
+  only `gif` and `vtt`; walkthroughs have their own endpoint (`POST
+  /api/demos/:id/walkthrough`). Unknown kinds return 501 so clients can
+  feature-gate.
+- **No walkthrough analytics or editing.** Generated files are static snapshots —
+  no click telemetry, no visitor counts, and no in-place editing; re-record and
+  regenerate instead.
 - **Webhook replay queue.** Delivery is best-effort, one retry. If you need a
   durable log, point the URL at a queue (SQS, Zapier, n8n) and acknowledge 2xx
   immediately.

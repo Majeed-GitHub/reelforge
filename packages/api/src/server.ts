@@ -12,6 +12,7 @@ import articleRoutes from './routes/articles.ts';
 import demoRoutes from './routes/demos.ts';
 import exportRoutes from './routes/exports.ts';
 import shareRoutes from './routes/share.ts';
+import walkthroughRoutes from './routes/walkthrough.ts';
 import domainRoutes from './routes/domains.ts';
 import environmentRoutes from './routes/environments.ts';
 import fileRoutes from './routes/files.ts';
@@ -154,6 +155,8 @@ export async function buildServer(options: BuildOptions = {}): Promise<FastifyIn
   // v0.2 outputs: GIF/VTT exports, public share pages, webhook config + delivery
   await app.register(exportRoutes);
   await app.register(shareRoutes);
+  // Interactive walkthrough output: one self-contained HTML file per demo.
+  await app.register(walkthroughRoutes);
   await app.register(webhookRoutes);
   await app.register(environmentRoutes);
   await app.register(domainRoutes);
