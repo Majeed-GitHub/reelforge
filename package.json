@@ -1,7 +1,7 @@
 {
   "name": "reelforge",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "description": "Reelforge — an open, self-hosted clone of Screenforge Director: give it a URL and one sentence, it drives your product in a real browser and publishes a narrated video, help article and in-app guide from one Product Graph.",
   "workspaces": [

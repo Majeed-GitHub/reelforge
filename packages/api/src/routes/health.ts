@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 
-export const VERSION = '0.2.0';
+export const VERSION = '0.3.0';
 export const SERVICE = 'reelforge';
 /** The CLI feature-gates itself on this list (Director parity). */
 export const FEATURES = [
