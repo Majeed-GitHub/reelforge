@@ -135,8 +135,8 @@ smoke test and CI never need credentials.
 claude mcp add --transport http reelforge http://127.0.0.1:4400/api/mcp \
   --header "X-API-Key: rg_…"
 
-# Claude Desktop, over stdio
-node packages/cli/src/mcp-stdio.ts --stdio --api-key rg_…
+# Claude Desktop, over stdio (bridges stdio -> the HTTP MCP server)
+npm run mcp:stdio -- --api-key rg_…
 ```
 
 Then just ask: *"Record a demo of signing up on http://127.0.0.1:4402 and publish a
@@ -169,6 +169,15 @@ embeddability. On Windows 11 / Node 25.8 with **zero API keys**:
 | Billed | 0.542 credits (32.549 s at 1 credit/minute) |
 
 Full log, including the honest limitation list: [docs/VERIFICATION.md](docs/VERIFICATION.md).
+
+Every suite is a real run, not a mock of the interesting parts:
+
+```bash
+npm test            # typecheck + MCP stdio bridge + dashboard browser suites
+npm run smoke       # records, renders and publishes a demo end to end
+npm run test:mcp    # stdio ↔ HTTP MCP bridge (8 checks, 39 tools proxied)
+npm run test:ui     # dashboard: 22 legacy + 18 v0.2 browser checks
+```
 
 ## Compared to Director
 

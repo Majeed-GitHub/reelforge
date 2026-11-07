@@ -38,6 +38,7 @@ import {
   CallToolRequestSchema,
   GetPromptRequestSchema,
   ListPromptsRequestSchema,
+  ListResourceTemplatesRequestSchema,
   ListResourcesRequestSchema,
   ListToolsRequestSchema,
   ReadResourceRequestSchema
@@ -119,6 +120,17 @@ local.setRequestHandler(ListResourcesRequestSchema, async () => {
     return { resources: result.resources ?? [] };
   } catch {
     return { resources: [] };
+  }
+});
+
+local.setRequestHandler(ListResourceTemplatesRequestSchema, async () => {
+  // Concrete resources come from resources/list; templates are how a client
+  // discovers the parameterised ones (reelforge://demos/{id} and friends).
+  try {
+    const result = await remote.listResourceTemplates();
+    return { resourceTemplates: result.resourceTemplates ?? [] };
+  } catch {
+    return { resourceTemplates: [] };
   }
 });
 

@@ -163,3 +163,54 @@ with real flows: sign up → create project → invite teammate → upgrade plan
 asserts: a demo reaches `complete`, the MP4 exists and is non-trivial in size,
 the Product Graph gained a flow, an article was generated, and a guide draft
 exists with resolvable selectors.
+
+---
+
+# v0.2 — what changed
+
+## The provider layer (BYOK)
+
+v0.1 read `config.LLM` at import time. v0.2 resolves per request:
+
+```
+resolveLlm()
+  ├─ env      REELFORGE_LLM_PROVIDER + that provider's keyEnv   (wins)
+  ├─ workspace  workspace_settings: llm.provider / llm.model / llm.baseUrl / llm.apiKey
+  └─ none      → the offline scripted planner
+```
+
+`workspace_settings` is a key/value table (`workspace_id`, `key`, `value_json`), so new
+settings never need a migration. Secrets are sealed with the same AES-256-GCM helper
+as captured sign-ins (`core/crypto.ts`) before they touch SQLite, and the API only
+ever returns a hint (`sk-…4f2a`).
+
+Every provider speaks the same wire format — `POST {baseUrl}/chat/completions` — which
+is why one planner covers GMI Cloud, OpenAI, OpenRouter, Groq, Together, Fireworks,
+DeepSeek, Ollama, LM Studio and any custom gateway. Model ids are discovered from
+`GET {baseUrl}/models` when the catalog moves too fast to hard-code.
+
+One deliberate gap: the worker resolves the workspace override only when exactly one
+workspace exists. Threading `workspaceId` through `runCapture()` is the change needed
+for multi-tenant BYOK; until then the resolver refuses to guess rather than risk
+using one tenant's key for another tenant's recording.
+
+## Outputs beyond the dashboard
+
+The completion path (`worker/pipeline.ts`) now fans out after the Product Graph
+upsert:
+
+| Output | How |
+|---|---|
+| Webhook | HMAC-signed JSON (`X-Reelforge-Signature: sha256=…`), 5 s timeout, one retry, Slack shape auto-detected on `hooks.slack.com` |
+| Share page | 30-day HMAC token → standalone HTML re-signing media URLs on every load (1 h each), so a long link keeps working |
+| GIF | 3.5 s window around the largest-box step, `palettegen`/`paletteuse`, 720 px cap, three quality passes under 2 MB |
+| VTT | Verbatim mirror of the burned SRT |
+
+Webhook and export failures are swallowed and logged: a broken receiver must never
+fail a recording that already cost minutes of browser time.
+
+## MCP transport parity
+
+`POST /api/mcp` (streamable HTTP) remains the server. `packages/cli/src/mcp-stdio.ts`
+bridges stdio-only clients (Claude Desktop) to it, so the same workspace, tools and
+results are reachable from either transport.

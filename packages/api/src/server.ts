@@ -49,7 +49,9 @@ export async function buildServer(options: BuildOptions = {}): Promise<FastifyIn
     bodyLimit: 8 * 1024 * 1024,
     // Signed media tokens are base64url claims + HMAC (~200 chars), far past
     // Fastify's 100-char default, so raise the param cap for /api/files/:token.
-    maxParamLength: 3000
+    // (routerOptions is the non-deprecated spelling; the top-level form emits
+    // FSTDEP022 on Fastify 5.12+.)
+    routerOptions: { maxParamLength: 3000 }
   });
 
   // Bodyless POSTs (reverify, cancel, publish, verify) are normal, but clients

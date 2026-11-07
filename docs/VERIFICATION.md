@@ -195,3 +195,25 @@ resolves the workspace override when exactly one workspace exists (multi-tenant
 BYOK would need the workspace id threaded through the worker — documented in
 docs/PROVIDERS.md); narration voice selection is wired but TTS keys remain
 environment-only.
+
+## MCP (v0.2)
+
+The server grew from 31 to **39 tools** plus **4 resource templates** and **4 prompts**,
+and gained a stdio transport so Claude Desktop can use it.
+
+| Check | Result |
+|---|---|
+| HTTP MCP (`:4411`) | **20/20** — initialize → `reelforge@0.2.0`; `tools/list` = 39; 4 templates; `resources/list` + `resources/read` for demo/flow/article/guide; 4 prompts + `prompts/get`; 8 `tools/call` cases including `health` (worker + llm + tts state), `get_usage` (credits this month), `get_demo_video` (signed URLs), `batch_create_demos` (2 created), and a `NOT_FOUND` error path returning `isError:true` with remediation |
+| stdio bridge | **7/7** driven over stdin with NDJSON: initialize, tools/list (39), tools/call `health`, resources/list, prompts/list, resources/read, clean exit on stdin close |
+| Bridge regression suite | `npm run test:mcp` → **8/8** |
+| Tool quality | every one of the 39 has a description > 40 chars; all args snake_case |
+
+## Final sweep (v0.2.0 tree)
+
+```
+npm test        → exit 0   (typecheck + 8 MCP bridge checks + 22 + 18 dashboard checks)
+npm run smoke   → exit 0   23/23, demo dem_v2o06q8f, 850 059 B video, 11 steps
+npx tsc         → exit 0
+npm audit --omit=dev → 0 vulnerabilities
+docker build    → reelforge:dev runs healthy on :4420, /api/health = v0.2.0 with 9 feature flags
+```

@@ -18,7 +18,11 @@
     "seed": "node --env-file-if-exists=.env scripts/seed.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "smoke": "node --env-file-if-exists=.env scripts/smoke.ts",
-    "publish:github": "node scripts/publish-github.mjs"
+    "publish:github": "node scripts/publish-github.mjs",
+    "mcp:stdio": "node packages/cli/src/mcp-stdio.ts --stdio",
+    "test:ui": "node packages/web/test/dashboard-smoke.mjs && node packages/web/test/v02-smoke.mjs",
+    "test:mcp": "node packages/cli/test/mcp-stdio-smoke.mjs",
+    "test": "npm run typecheck && npm run test:mcp && npm run test:ui"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.0",
