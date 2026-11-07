@@ -132,7 +132,8 @@ export const guideReportSchema = z
 
 export const presetCreateSchema = z.object({
   name: z.string().trim().min(1).max(120),
-  config: z.record(z.unknown()).optional(),
+  // zod 4 requires an explicit key schema; arbitrary JSON config stays allowed.
+  config: z.record(z.string(), z.unknown()).optional(),
   isDefault: z.boolean().optional()
 });
 
