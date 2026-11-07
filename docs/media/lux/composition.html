@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Reelforge — luxury promo</title>
+<link rel="stylesheet" href="lux.css">
+</head>
+<body>
+<div id="stage" data-format="16x9">
+
+  <!-- WebGL: a slow volumetric wash + grain. No images, no CDN. -->
+  <canvas id="bg" aria-hidden="true"></canvas>
+  <div class="vignette" aria-hidden="true"></div>
+
+  <!-- ACT 1 — wordmark -->
+  <section class="act act-mark" data-in="0.15" data-out="3.25">
+    <div class="mark-3d">
+      <div class="rule"></div>
+      <h1 class="wordmark">REELFORGE</h1>
+      <p class="tagline">Your product demos,<br><em>written by the product.</em></p>
+    </div>
+  </section>
+
+  <!-- ACT 2 — the instruction -->
+  <section class="act act-instruct" data-in="3.3" data-out="8.1">
+    <div class="chip-url"><span class="dot-live"></span>your-product.com</div>
+    <p class="typed"><span id="typed-text"></span><span class="caret"></span></p>
+    <p class="sub">One sentence. Any flow.</p>
+  </section>
+
+  <!-- ACT 3 — the pipeline + four outputs, in 3D -->
+  <section class="act act-pipeline" data-in="8.15" data-out="14.6">
+    <div class="scene-3d">
+      <div class="browser-card">
+        <div class="browser-bar"><i></i><i></i><i></i><span>your-product.com/app</span></div>
+        <div class="browser-body">
+          <div class="skel skel-nav"></div>
+          <div class="skel skel-title"></div>
+          <div class="skel skel-row"></div>
+          <div class="skel skel-row short"></div>
+          <div class="cursor"></div>
+          <div class="zoom-frame"></div>
+        </div>
+      </div>
+      <div class="outputs">
+        <div class="out" data-i="0"><span class="out-k">01</span>Video</div>
+        <div class="out" data-i="1"><span class="out-k">02</span>Article</div>
+        <div class="out" data-i="2"><span class="out-k">03</span>Walkthrough</div>
+        <div class="out" data-i="3"><span class="out-k">04</span>Guide</div>
+      </div>
+    </div>
+    <p class="caption"><em>One capture.</em> Four outputs.</p>
+  </section>
+
+  <!-- ACT 4 — providers, depth lanes -->
+  <section class="act act-providers" data-in="14.6" data-out="20.1">
+    <p class="prov-head">Bring your own model —<br><em>or run fully offline.</em></p>
+    <div class="lanes">
+      <div class="lane" data-speed="0.9" data-depth="1"></div>
+      <div class="lane" data-speed="1.35" data-depth="2"></div>
+      <div class="lane" data-speed="0.7" data-depth="3"></div>
+    </div>
+    <p class="prov-foot"><b>31</b> providers · free · paid · local</p>
+  </section>
+
+  <!-- ACT 5 — three beats -->
+  <section class="act act-beats" data-in="20.1" data-out="24.6">
+    <div class="beat" data-at="0">
+      <div class="frame-morph"><span>16:9</span></div>
+      <p>16:9 · 9:16 · 1:1</p>
+    </div>
+    <div class="beat" data-at="1.5">
+      <div class="mask-demo"><span class="field">done@acme.com</span><span class="mask"></span></div>
+      <p>Passwords and keys, masked</p>
+    </div>
+    <div class="beat" data-at="3.0">
+      <div class="hotspot-demo"><span class="hs"></span><span class="hs-ripple"></span></div>
+      <p>Clickable walkthrough</p>
+    </div>
+  </section>
+
+  <!-- ACT 6 — end card -->
+  <section class="act act-end" data-in="24.6" data-out="30">
+    <div class="end-mark">REELFORGE</div>
+    <div class="rule end-rule"></div>
+    <p class="end-line">Open source · MIT · <em>Free forever</em></p>
+    <p class="end-url">github.com/Majeed-GitHub/reelforge</p>
+    <pre class="end-cmds"><code>npm install &amp;&amp; npm run seed &amp;&amp; npm run dev</code></pre>
+    <p class="end-foot">No accounts · No telemetry · No watermark</p>
+  </section>
+
+  <!-- persistent frame furniture -->
+  <div class="hud" aria-hidden="true">
+    <span class="hud-l">REELFORGE</span>
+    <span class="hud-r" id="hud-t">00:00</span>
+  </div>
+</div>
+<script src="lux.js"></script>
+</body>
+</html>
