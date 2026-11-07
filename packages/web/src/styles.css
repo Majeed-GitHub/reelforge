@@ -1719,3 +1719,16 @@ a.link:hover {
 }
 .onboard-path strong { font-size: 13.5px; }
 .onboard-path .hint { margin: 0; }
+
+/* v0.3 — grouped provider picker */
+.provider-group { display: grid; gap: 8px; }
+.provider-group-head { display: flex; align-items: baseline; gap: 10px; margin-top: 4px; }
+.provider-group-title {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  font-weight: 600;
+  margin: 0;
+}
+.provider-filter { max-width: 320px; }

@@ -517,6 +517,10 @@ export type LlmProviderState = {
   id: string;
   label: string;
   baseUrl: string;
+  /** 'free' | 'paid' | 'local' — grouped in the picker when present. */
+  tier?: 'free' | 'paid' | 'local' | string;
+  /** True when the provider's key was found in the environment automatically. */
+  detected?: boolean;
   requiresKey: boolean;
   defaultModel?: string;
   helpUrl?: string;

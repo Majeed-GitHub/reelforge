@@ -184,6 +184,9 @@ try {
   const tiles = await page.locator('.provider-tile').count();
   check('settings: all 10 providers are listed', tiles === 10, `saw ${tiles}`);
   check('settings: offline state named honestly', await page.isVisible('text=Running fully local'));
+  const groups = await page.locator('.provider-group-title').count();
+  check('settings: providers are grouped (free / paid / local)', groups >= 2, `${groups} group(s)`);
+  check('settings: local group explains itself', (await page.locator('text=Runs on your machine').count()) > 0);
   check('settings: narration section present', await page.isVisible('text=Narration'));
   check('settings: about panel credits DeepSeek Harness + GMI Cloud', (await page.locator('text=DeepSeek Harness').count()) > 0 && (await page.locator('text=GMI Cloud').count()) > 0);
   await page.screenshot({ path: path.join(artifacts, 'v02-settings-providers.png'), fullPage: true });

@@ -15,6 +15,9 @@ export function ProviderSettingsCard() {
   const [state, setState] = useState<ProvidersState | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState('');
+
+  const grouped = useMemo(() => groupProviders(state?.llm.providers ?? [], filter), [state, filter]);
 
   async function refresh() {
     setLoading(true);
@@ -52,16 +55,33 @@ export function ProviderSettingsCard() {
       {state ? (
         <div className="stack">
           <ActiveProviderLine state={state} />
-          <div className="provider-grid">
-            {state.llm.providers.map((provider) => (
-              <ProviderTile
-                key={provider.id}
-                provider={provider}
-                selected={provider.id === state.llm.active.providerId}
-                onSaved={refresh}
-              />
-            ))}
-          </div>
+          {state.llm.providers.length > 12 ? (
+            <input
+              className="input provider-filter"
+              placeholder={`Filter ${state.llm.providers.length} providers…`}
+              value={filter}
+              onChange={(event) => setFilter(event.target.value)}
+              aria-label="Filter providers"
+            />
+          ) : null}
+          {grouped.map((group) => (
+            <div key={group.id} className="provider-group">
+              <div className="provider-group-head">
+                <h3 className="provider-group-title">{group.label}</h3>
+                <span className="hint">{group.hint}</span>
+              </div>
+              <div className="provider-grid">
+                {group.providers.map((provider) => (
+                  <ProviderTile
+                    key={provider.id}
+                    provider={provider}
+                    selected={provider.id === state.llm.active.providerId}
+                    onSaved={refresh}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       ) : null}
       <NarrationCard state={state} />
@@ -407,4 +427,36 @@ export function AboutCard({ version }: { version?: string }) {
       />
     </section>
   );
+}
+
+type ProviderGroup = { id: string; label: string; hint: string; providers: LlmProviderState[] };
+
+/** The catalog can be large; bucket it so the picker stays scannable. */
+function inferTier(provider: LlmProviderState): 'free' | 'paid' | 'local' {
+  const declared = provider.tier?.toLowerCase();
+  if (declared === 'free' || declared === 'paid' || declared === 'local') return declared;
+  const base = (provider.baseUrl ?? '').toLowerCase();
+  if (!provider.requiresKey || /127\.0\.0\.1|localhost|0\.0\.0\.0/.test(base)) return 'local';
+  return 'paid';
+}
+
+function groupProviders(providers: LlmProviderState[], filter: string): ProviderGroup[] {
+  const needle = filter.trim().toLowerCase();
+  const visible = needle
+    ? providers.filter((provider) =>
+        `${provider.label} ${provider.id} ${provider.baseUrl ?? ''} ${provider.note ?? ''}`.toLowerCase().includes(needle)
+      )
+    : providers;
+
+  const groups: ProviderGroup[] = [
+    { id: 'free', label: 'Free & open tiers', hint: 'no card, or a free allowance', providers: [] },
+    { id: 'paid', label: 'Paid cloud', hint: 'your key, billed by the provider', providers: [] },
+    { id: 'local', label: 'Runs on your machine', hint: 'no key, nothing leaves this box', providers: [] }
+  ];
+
+  for (const provider of visible) {
+    const group = groups.find((candidate) => candidate.id === inferTier(provider));
+    if (group) group.providers.push(provider);
+  }
+  return groups.filter((group) => group.providers.length > 0);
 }
