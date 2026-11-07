@@ -1,0 +1,601 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1920, initial-scale=1">
+<title>Reelforge — promo composition (1920×1080, 30s)</title>
+<!--
+  Video-as-code. One self-contained composition, 1920x1080, 30 seconds.
+  Deterministic JS timeline: every pixel is a pure function of `t` (seconds).
+    ?t=12.4   freeze the composition at 12.4s (frame-on-demand)
+  window.__start() starts the clock; window.__ready signals fonts/layout are ready.
+  No external assets, no network, no audio file.
+-->
+<style>
+  :root{
+    --bg:#070708;
+    --ink:#f2efe9;
+    --muted:#8a8a90;
+    --dim:#6b6b73;
+    --line:#26262b;
+    --panel:#0d0d0f;
+    --ember:#ff5c38;
+    --ember-soft:rgba(255,92,56,.14);
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+    --mono:"SFMono-Regular",ui-monospace,"Cascadia Mono",Consolas,"Courier New",monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{width:1920px;height:1080px;overflow:hidden;background:#000}
+  body{font-family:var(--sans);-webkit-font-smoothing:antialiased;text-rendering:geometricPrecision}
+  #stage{position:relative;width:1920px;height:1080px;overflow:hidden;background:var(--bg);color:var(--ink);user-select:none}
+  .act{position:absolute;inset:0;will-change:opacity}
+  .mini{font-family:var(--mono);font-size:22px;letter-spacing:.22em;text-transform:uppercase;color:var(--muted)}
+  .cap{font-size:26px;letter-spacing:.01em;color:var(--muted)}
+  .ember{color:var(--ember)}
+
+  /* ---------- overlays ---------- */
+  #vignette{position:absolute;inset:0;pointer-events:none;z-index:40;
+    background:radial-gradient(ellipse at 50% 48%,rgba(0,0,0,0) 52%,rgba(0,0,0,.5) 100%)}
+  #grain{position:absolute;inset:0;pointer-events:none;z-index:41;opacity:.05;mix-blend-mode:overlay;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='0.9'/></svg>")}
+  #progress{position:absolute;left:0;right:0;bottom:0;height:3px;background:#141416;z-index:42}
+  #progress i{display:block;height:100%;width:0;background:var(--ember);opacity:.75}
+
+  /* ---------- act 1 : wordmark ---------- */
+  #act1{display:flex;flex-direction:column;align-items:center;justify-content:center}
+  #kicker{margin-bottom:40px}
+  #wordmark{font-size:196px;font-weight:650;line-height:.98;letter-spacing:.14em;white-space:nowrap;
+    padding-left:.14em;text-align:center}
+  #rule{height:2px;width:0;background:var(--ember);margin:44px 0 40px;opacity:.95}
+  #tagline{font-size:52px;font-weight:420;letter-spacing:.005em;color:#c9c5bd;text-align:center;max-width:1500px}
+
+  /* ---------- act 2 : the instruction ---------- */
+  #act2{padding:0 160px;display:flex;flex-direction:column;justify-content:center}
+  #a2label{margin-bottom:56px}
+  #instruction{font-size:92px;font-weight:620;line-height:1.16;letter-spacing:-.025em;max-width:1600px}
+  .mask{display:inline-block;overflow:hidden;vertical-align:bottom;padding-bottom:.14em;margin-bottom:-.14em}
+  .w{display:inline-block;transform:translateY(112%);will-change:transform}
+  #caret{display:inline-block;width:8px;height:74px;background:var(--ember);margin-left:14px;vertical-align:-8px;border-radius:2px}
+  #chiprow{margin-top:72px;display:flex;align-items:center;gap:32px}
+  #chip{display:inline-flex;align-items:center;gap:18px;padding:22px 34px;border:1px solid #33333a;border-radius:999px;
+    background:var(--panel);font-family:var(--mono);font-size:38px;letter-spacing:.01em;color:var(--ink)}
+  .globe{position:relative;width:24px;height:24px;border:2px solid var(--ember);border-radius:50%}
+  .globe::before{content:"";position:absolute;left:50%;top:0;bottom:0;width:2px;background:var(--ember);transform:translateX(-1px)}
+  .globe::after{content:"";position:absolute;left:0;right:0;top:50%;height:2px;background:var(--ember);transform:translateY(-1px)}
+  #a2cap{margin-top:44px}
+
+  /* ---------- act 3 : pipeline ---------- */
+  #a3label{position:absolute;left:120px;top:96px}
+  #pipeline{position:absolute;left:200px;right:200px;top:150px;height:120px}
+  .pline{position:absolute;left:0;top:9px;height:1px;width:0;background:linear-gradient(90deg,transparent,var(--ember) 20%,var(--ember) 80%,transparent);opacity:.5}
+  .pnode{position:absolute;top:0;transform:translateX(-50%);width:260px;text-align:center;opacity:0}
+  .pnode .dot{display:block;width:18px;height:18px;margin:0 auto 22px;border:1px solid var(--ember);border-radius:50%;position:relative;background:var(--bg)}
+  .pnode .dot::after{content:"";position:absolute;inset:5px;border-radius:50%;background:var(--ember)}
+  .pnode b{display:block;font-size:34px;font-weight:600;letter-spacing:.01em}
+  .pnode em{display:block;margin-top:10px;font-style:normal;font-family:var(--mono);font-size:20px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+
+  #browser{position:absolute;left:50%;top:330px;width:800px;height:440px;margin-left:-400px;border:1px solid #2c2c33;border-radius:22px;
+    background:#0b0b0d;box-shadow:0 40px 120px rgba(0,0,0,.55);overflow:hidden;opacity:0;will-change:transform,opacity}
+  #browser .bar{height:46px;border-bottom:1px solid #1d1d22;display:flex;align-items:center;gap:10px;padding:0 22px}
+  #browser .bar i{width:10px;height:10px;border-radius:50%;background:#2f2f36}
+  #browser .bar i:first-child{background:var(--ember);opacity:.7}
+  #browser .bar span{margin-left:18px;font-family:var(--mono);font-size:17px;color:#5d5d66;letter-spacing:.02em}
+  #browser .body{display:flex;height:calc(100% - 46px)}
+  #browser .side{width:158px;border-right:1px solid #17171b;padding:26px 18px;display:flex;flex-direction:column;gap:16px}
+  #browser .side b{display:block;height:10px;border-radius:5px;background:#1d1d22}
+  #browser .side b:first-child{width:70%;background:#2a2a31}
+  #browser .main{flex:1;padding:30px 34px}
+  #browser .h{height:16px;border-radius:8px;background:#22222a;width:46%}
+  #browser .h.short{width:28%;margin-top:14px;background:#17171c}
+  #fieldA{margin-top:30px;width:470px;height:60px;border-radius:10px;border:1px solid #2b2b33;background:#101014}
+  #fieldB{margin-top:14px;width:470px;height:60px;border-radius:10px;border:1px solid #222229;background:#0e0e11}
+  #browser .cta{margin-top:22px;width:170px;height:48px;border-radius:10px;background:var(--ember);opacity:.85}
+  #cursor{position:absolute;left:0;top:0;width:26px;height:26px;border-radius:50%;background:var(--ember);
+    box-shadow:0 0 0 5px rgba(255,92,56,.16),0 10px 30px rgba(255,92,56,.35);opacity:0;z-index:5}
+  #zoomrect{position:absolute;left:0;top:0;border:2px solid var(--ember);border-radius:14px;opacity:0;
+    box-shadow:0 0 0 1px rgba(255,92,56,.25),inset 0 0 40px rgba(255,92,56,.05);will-change:transform,opacity}
+  #cards{position:absolute;left:0;top:812px;width:100%;height:170px}
+  .card{position:absolute;left:50%;top:0;width:250px;height:156px;margin-left:-125px;border:1px solid #2a2a31;border-radius:16px;
+    background:linear-gradient(180deg,#101014,#0a0a0c);padding:22px 24px;opacity:0;will-change:transform,opacity}
+  .card .idx{font-family:var(--mono);font-size:17px;color:var(--dim);letter-spacing:.18em}
+  .card b{display:block;margin-top:16px;font-size:33px;font-weight:600;letter-spacing:-.01em}
+  .card em{display:block;margin-top:8px;font-style:normal;font-family:var(--mono);font-size:17px;color:var(--muted);letter-spacing:.04em}
+  .card .pip{position:absolute;right:22px;top:22px;width:10px;height:10px;border-radius:2px;background:var(--ember);opacity:.8}
+
+  /* ---------- act 4 : provider wall ---------- */
+  #a4label{position:absolute;left:120px;top:96px}
+  #a4head{position:absolute;left:0;right:0;top:300px;text-align:center;font-size:64px;font-weight:560;letter-spacing:-.02em;opacity:0}
+  #a4head .muted{color:var(--muted)}
+  .crow{position:absolute;left:320px;right:0;height:110px;display:flex;align-items:center;overflow:hidden;
+    -webkit-mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent);
+    mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent)}
+  .track{display:flex;align-items:center;gap:64px;white-space:nowrap;will-change:transform}
+  .track span{font-size:46px;font-weight:500;letter-spacing:-.01em;color:#cfcbc3}
+  .track i{width:9px;height:9px;border-radius:50%;background:var(--ember);opacity:.7;flex:0 0 auto}
+  .tier{position:absolute;left:120px;font-family:var(--mono);font-size:20px;letter-spacing:.24em;color:var(--dim);text-transform:uppercase;opacity:0}
+  #rowFree{top:470px}
+  #rowPaid{top:590px}
+  #rowLocal{top:710px}
+  #tierFree{top:505px}
+  #tierPaid{top:625px}
+  #tierLocal{top:745px}
+
+  /* ---------- act 5 : three beats ---------- */
+  .beat{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;opacity:0}
+  .beat h2{font-size:98px;font-weight:620;letter-spacing:-.02em}
+  .beat .sub{margin-top:26px;font-size:30px;color:var(--muted)}
+  .beat .art{height:420px;display:flex;align-items:center;justify-content:center;margin-bottom:12px}
+  #aspectFrame{position:relative;border:2px solid #3b3b43;border-radius:10px;background:#0c0c0f;display:flex;align-items:center;justify-content:center;
+    box-shadow:inset 0 0 60px rgba(255,92,56,.04)}
+  #aspectFrame span{font-family:var(--mono);font-size:22px;letter-spacing:.2em;color:var(--muted)}
+  #mockField{position:relative;width:620px;height:90px;border-radius:12px;border:1px solid #2d2d35;background:#0e0e11;display:flex;align-items:center;padding:0 28px}
+  #dots{font-size:30px;letter-spacing:.36em;color:#6e6e78}
+  #redact{position:absolute;left:-14px;top:-10px;width:648px;height:110px;background:#000;border:1px solid #26262b;border-radius:4px;transform-origin:left center}
+  #mockBtn{position:relative;width:340px;height:92px;border-radius:12px;background:#15151a;border:1px solid #33333b;display:flex;align-items:center;justify-content:center;font-size:30px;letter-spacing:.02em}
+  #hotspot{position:absolute;left:105px;top:-19px;width:130px;height:130px;border-radius:50%;border:2px solid var(--ember);opacity:0}
+  #beatCursor{position:absolute;left:0;top:0;width:24px;height:24px;border-radius:50%;background:var(--ember);box-shadow:0 0 0 5px rgba(255,92,56,.15)}
+
+  /* ---------- act 6 : end card ---------- */
+  #act6{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+  #endmark{font-size:64px;font-weight:650;letter-spacing:.42em;padding-left:.42em;opacity:0}
+  #endrule{height:2px;width:0;background:var(--ember);margin:38px 0 34px;opacity:.9}
+  #endline{font-size:56px;font-weight:520;letter-spacing:-.01em;opacity:0}
+  #endurl{margin-top:34px;font-family:var(--mono);font-size:44px;letter-spacing:.01em;color:var(--ink);opacity:0}
+  #endurl .ember{color:var(--ember)}
+  #cmds{margin-top:52px;font-family:var(--mono);font-size:28px;line-height:2.05;color:#a7a39b;text-align:left;opacity:0}
+  #cmds div{opacity:0}
+  #cmds .p{color:var(--ember);margin-right:16px}
+  #endnote{margin-top:40px;font-family:var(--mono);font-size:19px;letter-spacing:.2em;color:var(--dim);text-transform:uppercase;opacity:0}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="vignette"></div>
+  <div id="grain"></div>
+  <div id="progress"><i id="progressFill"></i></div>
+
+  <!-- ACT 1 — 0.0–3.3s — wordmark -->
+  <section class="act" id="act1">
+    <div class="mini" id="kicker">AUTONOMOUS DEMO VIDEO</div>
+    <h1 id="wordmark">REELFORGE</h1>
+    <div id="rule"></div>
+    <p id="tagline">Your product demos, written by the product.</p>
+  </section>
+
+  <!-- ACT 2 — 3.3–8.1s — the instruction -->
+  <section class="act" id="act2">
+    <div class="mini" id="a2label">01 — One sentence from you</div>
+    <div id="instruction"></div>
+    <div id="chiprow">
+      <div id="chip"><span class="globe"></span><span>your-product.com</span></div>
+      <span class="cap" id="chipnote">one URL</span>
+    </div>
+    <div class="cap" id="a2cap">It plans, drives a real browser, and records the run.</div>
+  </section>
+
+  <!-- ACT 3 — 8.1–15.3s — pipeline -->
+  <section class="act" id="act3">
+    <div class="mini" id="a3label">02 — Browser · Capture · Render · Publish</div>
+    <div id="pipeline">
+      <div class="pline" id="pline"></div>
+      <div class="pnode" data-i="0"><span class="dot"></span><b>Browser</b><em>Playwright</em></div>
+      <div class="pnode" data-i="1"><span class="dot"></span><b>Capture</b><em>steps + video</em></div>
+      <div class="pnode" data-i="2"><span class="dot"></span><b>Render</b><em>zoom · captions · audio</em></div>
+      <div class="pnode" data-i="3"><span class="dot"></span><b>Publish</b><em>video · article · guide</em></div>
+    </div>
+    <div id="browser">
+      <div class="bar"><i></i><i></i><i></i><span>your-product.com/projects</span></div>
+      <div class="body">
+        <div class="side"><b></b><b></b><b></b><b></b><b></b></div>
+        <div class="main">
+          <div class="h"></div><div class="h short"></div>
+          <div id="fieldA"></div><div id="fieldB"></div>
+          <div class="cta"></div>
+        </div>
+      </div>
+    </div>
+    <div id="zoomrect"></div>
+    <div id="cursor"></div>
+    <div id="cards">
+      <div class="card" data-i="0"><span class="pip"></span><span class="idx">01</span><b>Video</b><em>MP4 · captions</em></div>
+      <div class="card" data-i="1"><span class="pip"></span><span class="idx">02</span><b>Article</b><em>Markdown</em></div>
+      <div class="card" data-i="2"><span class="pip"></span><span class="idx">03</span><b>Walkthrough</b><em>real hotspots</em></div>
+      <div class="card" data-i="3"><span class="pip"></span><span class="idx">04</span><b>Guide</b><em>one embed tag</em></div>
+    </div>
+  </section>
+
+  <!-- ACT 4 — 15.3–21.2s — provider wall -->
+  <section class="act" id="act4">
+    <div class="mini" id="a4label">03 — Bring your own model</div>
+    <div id="a4head">Bring your own model — <span class="muted">or run fully offline.</span></div>
+    <div class="tier" id="tierFree">free</div>
+    <div class="tier" id="tierPaid">paid</div>
+    <div class="tier" id="tierLocal">local</div>
+    <div class="crow" id="rowFree"><div class="track"></div></div>
+    <div class="crow" id="rowPaid"><div class="track"></div></div>
+    <div class="crow" id="rowLocal"><div class="track"></div></div>
+  </section>
+
+  <!-- ACT 5 — 21.2–25.3s — three beats -->
+  <section class="act" id="act5">
+    <div class="beat" id="beatA">
+      <div class="art"><div id="aspectFrame"><span id="aspectLabel">16:9</span></div></div>
+      <h2>16:9 · 9:16 · 1:1</h2>
+      <div class="sub">One render, every placement.</div>
+    </div>
+    <div class="beat" id="beatB">
+      <div class="art"><div id="mockField"><span id="dots">••••••••••</span><div id="redact"></div></div></div>
+      <h2>Passwords masked</h2>
+      <div class="sub">Blurred only while that step is on screen.</div>
+    </div>
+    <div class="beat" id="beatC">
+      <div class="art"><div id="mockBtn"><div id="hotspot"></div>Next step</div><div id="beatCursor"></div></div>
+      <h2>Clickable walkthrough</h2>
+      <div class="sub">No video. Real hotspots, one file.</div>
+    </div>
+  </section>
+
+  <!-- ACT 6 — 25.3–30s — end card -->
+  <section class="act" id="act6">
+    <div id="endmark">REELFORGE</div>
+    <div id="endrule"></div>
+    <div id="endline">Open source · MIT · Free forever</div>
+    <div id="endurl">github.com/<span class="ember">Majeed-GitHub</span>/reelforge</div>
+    <div id="cmds">
+      <div><span class="p">$</span>git clone https://github.com/Majeed-GitHub/reelforge.git</div>
+      <div><span class="p">$</span>npm install</div>
+      <div><span class="p">$</span>npm run dev</div>
+    </div>
+    <div id="endnote">No accounts · No telemetry · No watermark</div>
+  </section>
+</div>
+
+<script>
+(() => {
+  'use strict';
+  const DURATION = 30;
+
+  // ---- easing --------------------------------------------------------------
+  function cubicBezier(x1, y1, x2, y2) {
+    const cx = 3 * x1, bx = 3 * (x2 - x1) - cx, ax = 1 - cx - bx;
+    const cy = 3 * y1, by = 3 * (y2 - y1) - cy, ay = 1 - cy - by;
+    const sampleX = (u) => ((ax * u + bx) * u + cx) * u;
+    const sampleY = (u) => ((ay * u + by) * u + cy) * u;
+    const solve = (x) => {
+      let u = x;
+      for (let i = 0; i < 6; i++) {
+        const err = sampleX(u) - x;
+        if (Math.abs(err) < 1e-6) return u;
+        const d = (3 * ax * u + 2 * bx) * u + cx;
+        if (Math.abs(d) < 1e-6) break;
+        u -= err / d;
+      }
+      let lo = 0, hi = 1;
+      u = x;
+      for (let i = 0; i < 24; i++) {
+        const v = sampleX(u);
+        if (Math.abs(v - x) < 1e-6) return u;
+        if (v < x) lo = u; else hi = u;
+        u = (lo + hi) / 2;
+      }
+      return u;
+    };
+    return (x) => (x <= 0 ? 0 : x >= 1 ? 1 : sampleY(solve(x)));
+  }
+  // Entrance curve from the craft rules; marquees stay linear.
+  const ease = cubicBezier(0.16, 1, 0.3, 1);
+  const smooth = cubicBezier(0.22, 1, 0.36, 1);
+
+  const clamp01 = (v) => Math.min(1, Math.max(0, v));
+  const prog = (t, a, b) => clamp01((t - a) / (b - a));
+  const lerp = (a, b, p) => a + (b - a) * p;
+
+  // ---- DOM ----------------------------------------------------------------
+  const $ = (sel) => document.querySelector(sel);
+  const stage = $('#stage');
+  const el = {
+    act1: $('#act1'), kicker: $('#kicker'), wordmark: $('#wordmark'), rule: $('#rule'), tagline: $('#tagline'),
+    act2: $('#act2'), a2label: $('#a2label'), instruction: $('#instruction'), chiprow: $('#chiprow'),
+    chip: $('#chip'), chipnote: $('#chipnote'), a2cap: $('#a2cap'), caret: null,
+    act3: $('#act3'), a3label: $('#a3label'), pipeline: $('#pipeline'), pline: $('#pline'),
+    pnodes: [...document.querySelectorAll('.pnode')], browser: $('#browser'), cursor: $('#cursor'),
+    zoomrect: $('#zoomrect'), cards: [...document.querySelectorAll('.card')],
+    act4: $('#act4'), a4label: $('#a4label'), a4head: $('#a4head'),
+    tiers: { free: $('#tierFree'), paid: $('#tierPaid'), local: $('#tierLocal') },
+    rows: { free: $('#rowFree'), paid: $('#rowPaid'), local: $('#rowLocal') },
+    act5: $('#act5'), beatA: $('#beatA'), beatB: $('#beatB'), beatC: $('#beatC'),
+    aspectFrame: $('#aspectFrame'), aspectLabel: $('#aspectLabel'),
+    dots: $('#dots'), redact: $('#redact'), mockField: $('#mockField'),
+    mockBtn: $('#mockBtn'), hotspot: $('#hotspot'), beatCursor: $('#beatCursor'),
+    act6: $('#act6'), endmark: $('#endmark'), endrule: $('#endrule'), endline: $('#endline'),
+    endurl: $('#endurl'), cmds: $('#cmds'), cmdLines: [...document.querySelectorAll('#cmds div')],
+    endnote: $('#endnote'), progressFill: $('#progressFill')
+  };
+
+  // ---- act 2 : kinetic type ------------------------------------------------
+  const INSTRUCTION = ['Sign', 'in,', 'create', 'a', 'project,', 'invite', 'a', 'teammate.'];
+  const WORD_SLOTS = [];
+  {
+    const line1 = INSTRUCTION.slice(0, 5);
+    const line2 = INSTRUCTION.slice(5);
+    const lines = [];
+    [line1, line2].forEach((words) => {
+      const line = document.createElement('div');
+      words.forEach((word, wi) => {
+        const mask = document.createElement('span');
+        mask.className = 'mask';
+        const inner = document.createElement('span');
+        inner.className = 'w';
+        inner.textContent = word;
+        mask.appendChild(inner);
+        line.appendChild(mask);
+        if (wi < words.length - 1) line.appendChild(document.createTextNode(' '));
+        WORD_SLOTS.push({ inner, globalIndex: WORD_SLOTS.length });
+      });
+      el.instruction.appendChild(line);
+      lines.push(line);
+    });
+    const caret = document.createElement('span');
+    caret.id = 'caret';
+    lines[lines.length - 1].appendChild(caret);
+    el.caret = caret;
+  }
+
+  // ---- act 4 : provider wall ----------------------------------------------
+  const TIERS = {
+    free: ['Google Gemini', 'OpenRouter', 'Groq', 'Mistral AI', 'Cerebras', 'NVIDIA NIM', 'GitHub Models', 'Hugging Face Router', 'SambaNova', 'Alibaba DashScope'],
+    paid: ['GMI Cloud', 'OpenAI', 'Anthropic', 'DeepSeek', 'xAI', 'Together AI', 'Fireworks AI', 'DeepInfra', 'Nebius AI Studio', 'Novita AI', 'Hyperbolic', 'Moonshot', 'Zhipu GLM', 'Perplexity', 'Azure OpenAI'],
+    local: ['Ollama', 'LM Studio', 'llama.cpp', 'vLLM', 'LocalAI', 'Custom endpoint']
+  };
+  const MARQUEE = { free: { speed: 62, dir: -1, half: 0 }, paid: { speed: 78, dir: 1, half: 0 }, local: { speed: 50, dir: -1, half: 0 } };
+  for (const tier of ['free', 'paid', 'local']) {
+    const track = el.rows[tier].querySelector('.track');
+    const names = TIERS[tier];
+    const seq = [];
+    // two copies => seamless -50% loop
+    for (let copy = 0; copy < 2; copy++) {
+      for (const name of names) {
+        const span = document.createElement('span');
+        span.textContent = name;
+        seq.push(span, document.createElement('i'));
+      }
+    }
+    seq.pop();
+    track.append(...seq);
+  }
+
+  // ---- act 3 : geometry that depends on layout ----------------------------
+  const geom = { browser: null, fieldA: null, zoomBase: null };
+  function measure() {
+    const b = el.browser.getBoundingClientRect();
+    const f = $('#fieldA').getBoundingClientRect();
+    geom.browser = { x: b.left, y: b.top, w: b.width, h: b.height };
+    geom.fieldA = { x: f.left, y: f.top, w: f.width, h: f.height };
+    for (const tier of ['free', 'paid', 'local']) {
+      const track = el.rows[tier].querySelector('.track');
+      MARQUEE[tier].half = track.scrollWidth / 2;
+    }
+  }
+
+  // ---- helpers ------------------------------------------------------------
+  const set = (node, opacity, transform) => {
+    if (!node) return;
+    node.style.opacity = String(Math.round(clamp01(opacity) * 1000) / 1000);
+    if (transform != null) node.style.transform = transform;
+  };
+  const setT = (node, transform) => {
+    if (node) node.style.transform = transform;
+  };
+
+  // ---- the timeline: every style is a pure function of t ------------------
+  function renderAt(tSeconds) {
+    const t = Math.max(0, Math.min(DURATION, tSeconds));
+    el.progressFill.style.width = `${(t / DURATION) * 100}%`;
+    document.getElementById('progress').style.opacity = String(0.75 * (1 - prog(t, 29.15, 29.9)));
+
+    // ---------- ACT 1 (0 → 3.3) ----------
+    el.act1.style.opacity = String(1 - prog(t, 2.95, 3.35));
+    const pWord = ease(prog(t, 0.35, 1.35));
+    set(el.wordmark, pWord, `translateY(${22 * (1 - pWord)}px) scale(${0.9 + 0.1 * pWord})`);
+    el.wordmark.style.letterSpacing = `${(0.2 - 0.06 * pWord).toFixed(3)}em`;
+    set(el.kicker, ease(prog(t, 0.2, 0.75)), `translateY(${14 * (1 - ease(prog(t, 0.2, 0.75)))}px)`);
+    const pRule = ease(prog(t, 1.0, 1.7));
+    el.rule.style.width = `${Math.round(560 * pRule)}px`;
+    el.rule.style.opacity = String(0.95 * pRule);
+    const pTag = ease(prog(t, 1.55, 2.4));
+    set(el.tagline, pTag, `translateY(${26 * (1 - pTag)}px)`);
+
+    // ---------- ACT 2 (3.3 → 8.1) ----------
+    el.act2.style.opacity = String(Math.min(prog(t, 3.3, 3.55), 1 - prog(t, 7.72, 8.05)));
+    set(el.a2label, ease(prog(t, 3.4, 3.95)), `translateY(${12 * (1 - ease(prog(t, 3.4, 3.95)))}px)`);
+    for (const slot of WORD_SLOTS) {
+      const start = 3.72 + slot.globalIndex * 0.105;
+      const p = ease(prog(t, start, start + 0.62));
+      slot.inner.style.transform = `translateY(${112 * (1 - p)}%)`;
+      slot.inner.style.opacity = String(p);
+    }
+    const typingDone = 3.72 + WORD_SLOTS.length * 0.105 + 0.5;
+    const caretOn = t < 5.45 && Math.floor(t * 2.6) % 2 === 0 ? 1 : 0;
+    el.caret.style.opacity = String(caretOn);
+    el.caret.style.display = t < typingDone ? 'inline-block' : 'none';
+    const pChip = ease(prog(t, 5.5, 6.15));
+    set(el.chiprow, pChip, `translateY(${30 * (1 - pChip)}px)`);
+    el.chip.style.transform = `scale(${0.96 + 0.04 * pChip})`;
+    set(el.chipnote, ease(prog(t, 5.9, 6.5)), '');
+    set(el.a2cap, ease(prog(t, 6.2, 6.9)), `translateY(${12 * (1 - ease(prog(t, 6.2, 6.9)))}px)`);
+
+    // ---------- ACT 3 (8.1 → 15.3) ----------
+    el.act3.style.opacity = String(Math.min(prog(t, 8.1, 8.35), 1 - prog(t, 14.95, 15.3)));
+    set(el.a3label, ease(prog(t, 8.2, 8.75)), `translateY(${12 * (1 - ease(prog(t, 8.2, 8.75)))}px)`);
+    el.pnodes.forEach((node, i) => {
+      const p = ease(prog(t, 8.55 + i * 0.16, 9.15 + i * 0.16));
+      node.style.left = `${(i / (el.pnodes.length - 1)) * 100}%`;
+      set(node, p, `translateX(-50%) translateY(${16 * (1 - p)}px)`);
+    });
+    el.pline.style.width = `${ease(prog(t, 8.7, 9.9)) * 100}%`;
+    const pBrowser = ease(prog(t, 9.0, 9.95));
+    set(el.browser, pBrowser, `translateY(${26 * (1 - pBrowser)}px) scale(${0.965 + 0.035 * pBrowser})`);
+
+    // camera-ish motion: cursor travels across the mock UI, a zoom rect frames a field
+    const b = geom.browser;
+    if (b) {
+      const path = [
+        { u: 0.12, v: 0.62 },
+        { u: 0.34, v: 0.44 },
+        { u: 0.58, v: 0.4 },
+        { u: 0.72, v: 0.58 }
+      ];
+      const cu = smooth(prog(t, 9.55, 12.1));
+      const seg = cu * (path.length - 1);
+      const i0 = Math.min(path.length - 2, Math.floor(seg));
+      const f = seg - i0;
+      const u = lerp(path[i0].u, path[i0 + 1].u, f);
+      const v = lerp(path[i0].v, path[i0 + 1].v, f);
+      const cx = b.x + b.w * u;
+      const cy = b.y + b.h * v;
+      const cursorIn = prog(t, 9.5, 9.8) * (1 - prog(t, 12.15, 12.35));
+      const clickPulse = 1 + 0.35 * Math.max(0, 1 - Math.abs(t - 11.05) / 0.16);
+      set(el.cursor, cursorIn * pBrowser, `translate(${cx - 13}px,${cy - 13}px) scale(${clickPulse})`);
+
+      const fA = geom.fieldA;
+      if (fA) {
+        const pZoom = smooth(prog(t, 10.15, 10.85)) * (1 - prog(t, 12.2, 12.45));
+        const pad = 18;
+        el.zoomrect.style.width = `${fA.w + pad * 2}px`;
+        el.zoomrect.style.height = `${fA.h + pad * 2}px`;
+        set(el.zoomrect, pZoom * pBrowser, `translate(${fA.x - pad}px,${fA.y - pad}px) scale(${0.94 + 0.06 * pZoom})`);
+      }
+    }
+
+    const cardLefts = [-411, -137, 137, 411];
+    const cardRots = [-5, -1.6, 1.6, 5];
+    el.cards.forEach((card, i) => {
+      const p = ease(prog(t, 12.5 + i * 0.1, 13.25 + i * 0.1));
+      const dx = cardLefts[i] * p;
+      const dy = 700 - 812 - 40; // fan up from the browser, then settle
+      card.style.transform = `translate(${dx}px,${dy * (1 - p)}px) rotate(${cardRots[i] * p}deg) scale(${0.72 + 0.28 * p})`;
+      card.style.opacity = String(p);
+    });
+
+    // ---------- ACT 4 (15.3 → 21.2) ----------
+    el.act4.style.opacity = String(Math.min(prog(t, 15.3, 15.6), 1 - prog(t, 20.85, 21.2)));
+    const pHead = ease(prog(t, 15.55, 16.35));
+    set(el.a4head, pHead, `translateY(${24 * (1 - pHead)}px)`);
+    set(el.a4label, ease(prog(t, 15.4, 15.9)), '');
+    for (const tier of ['free', 'paid', 'local']) {
+      set(el.tiers[tier], ease(prog(t, 15.7, 16.2)), '');
+      const track = el.rows[tier].querySelector('.track');
+      const cfg = MARQUEE[tier];
+      if (cfg.half > 0) {
+        const dist = (t - 15.55) * cfg.speed;
+        const offset = cfg.dir < 0 ? -(dist % cfg.half) : -(cfg.half - (dist % cfg.half));
+        track.style.transform = `translateX(${offset.toFixed(2)}px)`;
+      }
+    }
+
+    // ---------- ACT 5 (21.2 → 25.3) — three beats ----------
+    el.act5.style.opacity = '1';
+    const beats = [
+      { node: el.beatA, a: 21.35, b: 22.55 },
+      { node: el.beatB, a: 22.65, b: 23.85 },
+      { node: el.beatC, a: 23.95, b: 25.15 }
+    ];
+    for (const beat of beats) {
+      const local = t - beat.a;
+      const vis = Math.min(prog(local, 0, 0.18), 1 - prog(local, 1.02, 1.2));
+      beat.node.style.opacity = String(clamp01(vis));
+      const lift = (1 - ease(prog(local, 0, 0.5))) * 22;
+      beat.node.style.transform = `translateY(${lift}px)`;
+    }
+    // beat A: 16:9 → 9:16 → 1:1 morph
+    {
+      const local = clamp01((t - 21.35) / 1.2);
+      const p1 = smooth(prog(local, 0.1, 0.44));
+      const p2 = smooth(prog(local, 0.56, 0.86));
+      const w = lerp(lerp(430, 214, p1), 300, p2);
+      const h = lerp(lerp(242, 380, p1), 300, p2);
+      const label = p2 > 0.5 ? '1:1' : p1 > 0.5 ? '9:16' : '16:9';
+      el.aspectFrame.style.width = `${Math.round(w)}px`;
+      el.aspectFrame.style.height = `${Math.round(h)}px`;
+      el.aspectLabel.textContent = label;
+    }
+    // beat B: redaction box snaps over the password field
+    {
+      const local = clamp01((t - 22.65) / 1.2);
+      const snap = ease(prog(local, 0.3, 0.46));
+      el.redact.style.transform = `scaleX(${snap.toFixed(3)})`;
+      el.redact.style.opacity = String(snap > 0 ? 1 : 0);
+      el.dots.style.opacity = String(1 - 0.6 * snap);
+    }
+    // beat C: hotspot pulse + cursor
+    {
+      const local = clamp01((t - 23.95) / 1.2);
+      const beat = (t * 1.7) % 1;
+      const pulse = prog(local, 0.15, 1);
+      el.hotspot.style.transform = `scale(${1 + 0.55 * beat})`;
+      el.hotspot.style.opacity = String((1 - beat) * 0.85 * pulse);
+      const bx = el.mockBtn.getBoundingClientRect();
+      const px = bx.left + bx.width * 0.72;
+      const py = bx.top + bx.height * 0.5;
+      el.beatCursor.style.transform = `translate(${px - 12}px,${py - 12}px)`;
+      el.beatCursor.style.opacity = String(prog(local, 0.05, 0.18));
+    }
+
+    // ---------- ACT 6 (25.3 → 30) ----------
+    const pEnd = ease(prog(t, 25.45, 26.05));
+    el.act6.style.opacity = String(pEnd * (1 - prog(t, 29.05, 30)));
+    set(el.endmark, ease(prog(t, 25.55, 26.15)), `translateY(${14 * (1 - ease(prog(t, 25.55, 26.15)))}px)`);
+    const pRule2 = ease(prog(t, 25.85, 26.5));
+    el.endrule.style.width = `${Math.round(460 * pRule2)}px`;
+    el.endrule.style.opacity = String(0.9 * pRule2);
+    const pLine = ease(prog(t, 26.0, 26.75));
+    set(el.endline, pLine, `translateY(${18 * (1 - pLine)}px)`);
+    const pUrl = ease(prog(t, 26.35, 27.05));
+    set(el.endurl, pUrl, `translateY(${14 * (1 - pUrl)}px)`);
+    set(el.cmds, ease(prog(t, 26.9, 27.5)), '');
+    el.cmdLines.forEach((line, i) => {
+      const p = ease(prog(t, 26.95 + i * 0.16, 27.55 + i * 0.16));
+      set(line, p, `translateY(${10 * (1 - p)}px)`);
+    });
+    set(el.endnote, ease(prog(t, 27.7, 28.3)), '');
+
+    document.body.dataset.t = t.toFixed(3);
+  }
+
+  // ---- boot: ?t= seek, otherwise clock-driven ------------------------------
+  const params = new URLSearchParams(location.search);
+  const seekRaw = params.get('t');
+  function finishBoot() {
+    measure();
+    if (seekRaw !== null) {
+      const t = Number(seekRaw);
+      renderAt(Number.isFinite(t) ? t : 0);
+      window.__ready = true;
+      window.__seek = (value) => renderAt(Number(value));
+      return;
+    }
+    renderAt(0);
+    window.__ready = true;
+    window.__seek = (value) => renderAt(Number(value));
+    window.__start = () => {
+      const startedAt = performance.now();
+      const tick = () => {
+        const t = (performance.now() - startedAt) / 1000;
+        renderAt(t);
+        if (t < DURATION) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    };
+  }
+
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(finishBoot).catch(finishBoot);
+  } else {
+    finishBoot();
+  }
+  // Expose the storyboard for humans and for the recorder's checks.
+  window.__promo = { duration: DURATION, title: 'REELFORGE — promo', repo: 'github.com/Majeed-GitHub/reelforge' };
+})();
+</script>
+</body>
+</html>
