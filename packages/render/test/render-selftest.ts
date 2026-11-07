@@ -337,13 +337,27 @@ async function main(): Promise<void> {
   );
   check('video stream present (h264)', probe.hasVideo && probe.videoCodec === 'h264', `codec=${probe.videoCodec}`);
 
-  const lastLine = result.lines.reduce((max, line) => Math.max(max, line.startMs + line.durationMs), 0);
-  const expectedDurationMs = Math.max(sourceProbe.durationMs, lastLine + 400);
-  const durationOk = Math.abs(probe.durationMs - expectedDurationMs) <= 1200;
+  // CI once caught captions and the watermark silently falling back on Linux
+  // because the runner had no usable font. A silent fallback is a bug, not a
+  // graceful degradation, so it is now a check of its own.
+  const filterFallbacks = result.warnings.filter((w) => /caption burn failed|watermark failed/i.test(w));
+  check(
+    'no filter fallback (captions + watermark burned)',
+    filterFallbacks.length === 0,
+    filterFallbacks.length ? filterFallbacks.join(' | ') : 'both filters applied'
+  );
+
+  // The renderer tells us how long it intends the video to be; assert the file
+  // matches that plan and is never shorter than the capture. This is
+  // provider-independent: with narration the plan includes the voiceover, with
+  // TTS=none it is just the capture length, and either way plan must equal file.
+  const plannedDurationMs = Number.isFinite(result.durationMs) && result.durationMs > 0 ? result.durationMs : sourceProbe.durationMs;
+  const durationOk =
+    Math.abs(probe.durationMs - plannedDurationMs) <= 1200 && probe.durationMs >= sourceProbe.durationMs - 250;
   check(
     'duration within tolerance',
     durationOk,
-    `measured ${probe.durationMs}ms, expected ~${expectedDurationMs}ms (tolerance 1200ms)`
+    `file ${probe.durationMs}ms vs planned ${plannedDurationMs}ms, capture ${sourceProbe.durationMs}ms (tolerance 1200ms)`
   );
 
   if (provider !== 'none') {

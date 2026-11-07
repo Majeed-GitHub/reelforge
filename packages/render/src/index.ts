@@ -167,18 +167,55 @@ function escapeFilterPath(filePath: string): string {
   return filePath.replace(/\\/g, '/').replace(/:/g, '\\:').replace(/'/g, "\\'");
 }
 
-function windowsFontsDir(): string | null {
-  if (process.platform !== 'win32') return null;
-  const dir = path.join(process.env.WINDIR ?? 'C:\\Windows', 'Fonts');
+/**
+ * Captions and the watermark must not depend on whatever fonts a machine
+ * happens to have. CI caught exactly that: the Ubuntu runner has no Arial and
+ * no fontconfig entry for libass, so both filters failed and the render fell
+ * back to no captions and no watermark while Windows and macOS passed.
+ *
+ * So we ship DejaVu Sans (permissive licence, the same family Linux usually
+ * has) inside the package and point both filters at it.
+ */
+const BUNDLED_FONT_DIR = path.resolve(import.meta.dirname, '..', 'assets', 'fonts');
+const BUNDLED_FONT_REGULAR = path.join(BUNDLED_FONT_DIR, 'DejaVuSans.ttf');
+const BUNDLED_FONT_BOLD = path.join(BUNDLED_FONT_DIR, 'DejaVuSans-Bold.ttf');
+
+function fileExists(candidate: string): boolean {
   try {
-    if (fs.statSync(dir).isDirectory()) return dir;
+    return fs.statSync(candidate).isFile();
   } catch {
-    return null;
+    return false;
   }
-  return null;
+}
+
+/** The directory both libass and drawtext should read fonts from. */
+function renderFontsDir(): string | null {
+  if (fileExists(BUNDLED_FONT_REGULAR) || fileExists(BUNDLED_FONT_BOLD)) return BUNDLED_FONT_DIR;
+  const platformDir =
+    process.platform === 'win32'
+      ? path.join(process.env.WINDIR ?? 'C:\\Windows', 'Fonts')
+      : process.platform === 'darwin'
+        ? '/System/Library/Fonts'
+        : '/usr/share/fonts/truetype';
+  return fileExists(platformDir) || (() => {
+    try {
+      return fs.statSync(platformDir).isDirectory();
+    } catch {
+      return false;
+    }
+  })()
+    ? platformDir
+    : null;
+}
+
+/** Family name for force_style, matching whichever font we actually ship. */
+function renderFontFamily(): string {
+  return fileExists(BUNDLED_FONT_REGULAR) || fileExists(BUNDLED_FONT_BOLD) ? 'DejaVu Sans' : 'Arial';
 }
 
 function findWatermarkFont(): string | null {
+  if (fileExists(BUNDLED_FONT_BOLD)) return BUNDLED_FONT_BOLD;
+  if (fileExists(BUNDLED_FONT_REGULAR)) return BUNDLED_FONT_REGULAR;
   const candidates =
     process.platform === 'win32'
       ? [
@@ -308,11 +345,11 @@ function buildVideoChains(attempt: RenderAttempt, variant: Variant): string[] {
   const overlays: string[] = [];
   if (variant.subtitles && attempt.subtitlesPath) {
     const srtName = path.basename(attempt.subtitlesPath).replace(/\\/g, '/').replace(/:/g, '\\:');
-    const fontDir = windowsFontsDir();
+    const fontDir = renderFontsDir();
     const fontSize = Math.round(clamp(attempt.height * 0.028, 14, 64));
     const marginV = Math.round(clamp(attempt.height * 0.045, 16, 160));
     const style = [
-      'FontName=Arial',
+      `FontName=${renderFontFamily()}`,
       `FontSize=${fontSize}`,
       'PrimaryColour=&H00FFFFFF',
       'OutlineColour=&H00000000',

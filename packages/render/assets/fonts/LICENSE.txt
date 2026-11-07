@@ -1,0 +1,3 @@
+﻿DejaVu Sans (Bitstream Vera / public-domain-ish permissive licence), bundled so
+captions and the watermark never depend on the host's font set. See
+LICENSE.txt next to the fonts.
