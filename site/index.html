@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reelforge — your product demos, written by the product</title>
+<meta name="description" content="Give Reelforge a URL and one sentence. It drives your product in a real browser and publishes a narrated demo video, help article, interactive walkthrough and in-app guide from one capture. Open source, MIT, free forever. Bring your own model or run fully offline.">
+<link rel="canonical" href="https://majeed-github.github.io/reelforge/">
+<meta name="theme-color" content="#0a0a0b">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Reelforge — your product demos, written by the product">
+<meta property="og:description" content="One URL, one sentence, four outputs. Open-source and self-hosted. Bring your own model — 31 providers — or run fully offline. MIT, free forever.">
+<meta property="og:image" content="assets/img/video-poster.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230a0a0b'/%3E%3Cpath d='M9 23V9h7.5a4.5 4.5 0 0 1 0 9H13l7 5' stroke='%23ff5c38' stroke-width='2.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="preload" href="assets/fonts/manrope-400.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/fonts/instrument-serif-400.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="nav" data-nav>
+  <div class="nav-inner">
+    <a class="wordmark" href="#top" aria-label="Reelforge home">
+      <span class="wordmark-mark" aria-hidden="true">
+        <svg viewBox="0 0 32 32" width="22" height="22"><path d="M9 23V9h7.5a4.5 4.5 0 0 1 0 9H13l7 5" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </span>
+      Reelforge
+    </a>
+    <nav class="nav-links" aria-label="Primary">
+      <a href="#outputs">Outputs</a>
+      <a href="#how">How it works</a>
+      <a href="#providers">Providers</a>
+      <a href="#compare">Compare</a>
+      <a href="#start">Quickstart</a>
+    </nav>
+    <div class="nav-cta">
+      <span class="pill">MIT · free forever</span>
+      <a class="btn btn-ghost btn-sm" href="https://github.com/Majeed-GitHub/reelforge" target="_blank" rel="noreferrer">GitHub ↗</a>
+    </div>
+    <button class="nav-toggle" type="button" aria-label="Menu" aria-expanded="false" data-nav-toggle>
+      <span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main id="main">
+  <section class="hero" id="top">
+    <div class="wrap">
+      <p class="eyebrow" data-reveal><span class="dot"></span>Open source · self-hosted · no account</p>
+      <h1 data-reveal>
+        Your product demos,<br>
+        <em>written by the product.</em>
+      </h1>
+      <p class="lede" data-reveal>
+        Give Reelforge a URL and one sentence. It drives your product in a real browser,
+        records the run, and publishes a narrated video, a help article, an interactive
+        walkthrough and an in-app guide — all from one capture.
+      </p>
+      <div class="hero-actions" data-reveal>
+        <a class="btn btn-primary" href="#start">Get started</a>
+        <a class="btn btn-ghost" href="https://github.com/Majeed-GitHub/reelforge" target="_blank" rel="noreferrer">View on GitHub ↗</a>
+      </div>
+
+      <figure class="hero-media" data-reveal>
+        <video
+          class="hero-video"
+          src="media/reelforge-promo.mp4"
+          poster="assets/img/video-poster.png"
+          muted loop playsinline preload="metadata"
+          aria-label="Reelforge promotion: one URL and one sentence become a demo video, article, walkthrough and guide"></video>
+        <figcaption>
+          <span class="mono">00:30</span>
+          <span>One sentence in, four outputs out — this is the actual pipeline, not a mockup.</span>
+        </figcaption>
+      </figure>
+
+      <dl class="stats" data-reveal>
+        <div><dt>31</dt><dd>model providers, free and paid</dd></div>
+        <div><dt>39</dt><dd>MCP tools, HTTP and stdio</dd></div>
+        <div><dt>0</dt><dd>API keys needed to try it</dd></div>
+        <div><dt>MIT</dt><dd>no paid tier, no telemetry</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section class="section" id="outputs">
+    <div class="wrap">
+      <header class="section-head" data-reveal>
+        <p class="eyebrow"><span class="dot"></span>What comes out</p>
+        <h2>One recording. Four ways to be understood.</h2>
+        <p class="section-sub">
+          Marketing wants a video, support wants an article, onboarding wants a walkthrough,
+          and users want help inside the product. Today that is four jobs. Reelforge records
+          the flow once and publishes all four from the same capture.
+        </p>
+      </header>
+
+      <div class="outputs">
+        <article class="output output-wide" data-reveal>
+          <div class="output-media">
+            <img src="assets/img/demo-detail.png" alt="Reelforge demo detail: a recorded run with video, steps and transcript" loading="lazy" width="1280" height="800">
+          </div>
+          <div class="output-body">
+            <span class="mono">01 — Video</span>
+            <h3>A narrated video, polished like an editor did it</h3>
+            <p>Auto-zoom onto every action, an eased cursor injected into the page, captions and a voiceover timed to the steps. Rendered in one ffmpeg pass.</p>
+          </div>
+        </article>
+
+        <article class="output" data-reveal>
+          <div class="output-media">
+            <img src="assets/img/guide.png" alt="An in-app guide rendered by the embeddable widget" loading="lazy" width="760" height="430">
+          </div>
+          <div class="output-body">
+            <span class="mono">02 — Article</span>
+            <h3>Help articles written from the flow</h3>
+            <p>Step-by-step Markdown with signed screenshots, ready for your help centre — and flagged the moment the flow drifts.</p>
+          </div>
+        </article>
+
+        <article class="output" data-reveal>
+          <div class="output-media">
+            <img src="assets/img/graph.png" alt="Reelforge Product Graph: flows with fresh and stale status" loading="lazy" width="760" height="430">
+          </div>
+          <div class="output-body">
+            <span class="mono">03 — Walkthrough</span>
+            <h3>A clickable demo in one HTML file</h3>
+            <p>Hotspots at the recorded coordinates, keyboard navigation, no server and no dependencies. Email it, host it, embed it.</p>
+          </div>
+        </article>
+
+        <article class="output" data-reveal>
+          <div class="output-media">
+            <img src="assets/img/onboarding.png" alt="In-app guide overlay" loading="lazy" width="760" height="430">
+          </div>
+          <div class="output-body">
+            <span class="mono">04 — Guide</span>
+            <h3>Walkthroughs inside your own product</h3>
+            <p>A 3.9 kB script tag. Shadow-DOM isolated, so it cannot break your CSS, and it skips any step whose button moved.</p>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section section-alt" id="how">
+    <div class="wrap">
+      <header class="section-head" data-reveal>
+        <p class="eyebrow"><span class="dot"></span>How it works</p>
+        <h2>Five stages, one instruction.</h2>
+      </header>
+      <ol class="pipeline">
+        <li data-reveal><span class="step-n">01</span><h3>Plan</h3><p>Your sentence becomes browser actions. Any OpenAI-compatible model — or the offline planner that ships with it.</p></li>
+        <li data-reveal><span class="step-n">02</span><h3>Drive</h3><p>Playwright opens your product and acts: clicks, types, scrolls, signs in. No human at the keyboard.</p></li>
+        <li data-reveal><span class="step-n">03</span><h3>Capture</h3><p>Every step records timing, the element's box, a screenshot and a narration line — and masks sensitive fields.</p></li>
+        <li data-reveal><span class="step-n">04</span><h3>Render</h3><p>Auto-zoom, captions, voiceover and framing, in a single pass. 16:9 for docs, 9:16 for social.</p></li>
+        <li data-reveal><span class="step-n">05</span><h3>Publish</h3><p>Video, article, walkthrough and guide from one map of your product. Re-check it and drift is flagged.</p></li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="section" id="features">
+    <div class="wrap">
+      <header class="section-head" data-reveal>
+        <p class="eyebrow"><span class="dot"></span>What is inside</p>
+        <h2>The parts paid tools charge for.</h2>
+        <p class="section-sub">Every item below is in the free build — no plan, no watermark you cannot remove, no export cap.</p>
+      </header>
+      <div class="features">
+        <article data-reveal><h3>Auto-zoom that knows where the action is</h3><p>The camera eases onto each element's bounding box and stays clamped to the frame, so it never pans into empty space.</p></article>
+        <article data-reveal><h3>Narration on any OS</h3><p>macOS <code>say</code>, Linux espeak/pico2wave, Windows SAPI, edge-tts, OpenAI or ElevenLabs — it picks what this machine can actually do.</p></article>
+        <article data-reveal><h3>Social framing</h3><p>16:9, 9:16, 1:1, 4:5 — reframed over a blurred copy of the frame instead of letterboxed into bars.</p></article>
+        <article data-reveal><h3>Privacy masking</h3><p>Passwords, card numbers and keys are masked in the screenshots and blurred in the video, only while they are on screen.</p></article>
+        <article data-reveal><h3>A Product Graph, not a folder of files</h3><p>Flows are deduplicated by signature. Re-check a flow and Reelforge tells you which controls moved and which articles went stale.</p></article>
+        <article data-reveal><h3>Music that ducks itself</h3><p>Drop in a track; narration dips it with a sidechain compressor and brings it back in the gaps.</p></article>
+        <article data-reveal><h3>Agent-native</h3><p>40+ REST endpoints and 39 MCP tools over HTTP <em>and</em> stdio, so Claude Code, Cursor and Claude Desktop can record for you.</p></article>
+        <article data-reveal><h3>Webhooks, GIFs and share pages</h3><p>HMAC-signed webhooks (paste a Slack URL and it just works), a 3.5 s GIF for chat, and a public link that needs no account.</p></article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section section-providers" id="providers">
+    <div class="wrap">
+      <header class="section-head" data-reveal>
+        <p class="eyebrow"><span class="dot"></span>Bring your own model</p>
+        <h2>Your key. Your provider. Or nothing at all.</h2>
+        <p class="section-sub">
+          Reelforge speaks the OpenAI chat format, so the planner works with whoever you already pay —
+          or with a model on your own laptop. If any conventional key is in your environment, it finds it.
+        </p>
+      </header>
+    </div>
+
+    <div class="marquee" aria-hidden="true">
+      <div class="marquee-track" data-marquee>
+        <span>GMI Cloud</span><span>OpenAI</span><span>Anthropic</span><span>Google Gemini</span><span>OpenRouter</span><span>Groq</span><span>Mistral</span><span>Cerebras</span><span>NVIDIA NIM</span><span>GitHub Models</span><span>Hugging Face</span><span>SambaNova</span><span>DashScope</span><span>DeepSeek</span><span>xAI</span><span>Together</span><span>Fireworks</span><span>DeepInfra</span><span>Nebius</span><span>Novita</span><span>Hyperbolic</span><span>Moonshot</span><span>Zhipu</span><span>Perplexity</span><span>Azure OpenAI</span><span>Ollama</span><span>LM Studio</span><span>llama.cpp</span><span>vLLM</span><span>LocalAI</span><span>Custom</span>
+      </div>
+    </div>
+
+    <div class="wrap">
+      <div class="tiers">
+        <div data-reveal><span class="mono">10</span><h3>Free tiers</h3><p>Google Gemini, OpenRouter, Groq, Mistral, Cerebras, NVIDIA NIM, GitHub Models, Hugging Face, SambaNova, DashScope.</p></div>
+        <div data-reveal><span class="mono">15</span><h3>Paid cloud</h3><p>GMI Cloud, OpenAI, Anthropic, DeepSeek, xAI, Together, Fireworks, DeepInfra, Nebius, Novita, Hyperbolic, Moonshot, Zhipu, Perplexity, Azure.</p></div>
+        <div data-reveal><span class="mono">6</span><h3>On your machine</h3><p>Ollama, LM Studio, llama.cpp, vLLM, LocalAI — nothing leaves the box, no key, no cost.</p></div>
+      </div>
+      <p class="footnote" data-reveal>
+        Keys pasted in the dashboard are sealed with AES-256-GCM and never returned by the API — only a masked hint.
+        AWS Bedrock and Google Vertex need SigV4/OAuth rather than a key, so they are documented as unsupported instead of half-working.
+      </p>
+    </div>
+  </section>
+
+  <section class="section section-alt" id="compare">
+    <div class="wrap">
+      <header class="section-head" data-reveal>
+        <p class="eyebrow"><span class="dot"></span>Honest comparison</p>
+        <h2>Where we actually differ.</h2>
+        <p class="section-sub">No tool wins every row. This is what each one is genuinely good at.</p>
+      </header>
+      <div class="table-wrap" data-reveal>
+        <table class="compare-table">
+          <thead>
+            <tr><th scope="col">Capability</th><th scope="col" class="is-us">Reelforge</th><th scope="col">Director</th><th scope="col">Loom</th><th scope="col">Screen Studio</th><th scope="col">Supademo</th></tr>
+          </thead>
+          <tbody>
+            <tr><th scope="row">Drives the product itself, no human</th><td class="is-us">Yes</td><td>Yes</td><td>No</td><td>No</td><td>No</td></tr>
+            <tr><th scope="row">Narrated video + article + guide from one capture</th><td class="is-us">Yes</td><td>Yes</td><td>Partial</td><td>No</td><td>Partial</td></tr>
+            <tr><th scope="row">Clickable walkthrough</th><td class="is-us">Yes</td><td>No</td><td>No</td><td>No</td><td>Yes</td></tr>
+            <tr><th scope="row">Aspect ratios for social</th><td class="is-us">Yes</td><td>No</td><td>Partial</td><td>Yes</td><td>No</td></tr>
+            <tr><th scope="row">Privacy masking</th><td class="is-us">Yes</td><td>Unknown</td><td>Paid</td><td>Yes</td><td>No</td></tr>
+            <tr><th scope="row">Bring your own model</th><td class="is-us">31 providers</td><td>Their models</td><td>No</td><td>N/A</td><td>No</td></tr>
+            <tr><th scope="row">Runs fully offline</th><td class="is-us">Yes</td><td>No</td><td>No</td><td>Yes</td><td>No</td></tr>
+            <tr><th scope="row">Self-hosted, MIT</th><td class="is-us">Yes</td><td>No</td><td>No</td><td>No</td><td>No</td></tr>
+            <tr><th scope="row">Price</th><td class="is-us">Free forever</td><td>Per minute</td><td>Per seat</td><td>One-off</td><td>Per seat</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="footnote" data-reveal>
+        Screenforge's <a href="https://github.com/screenforgeai/screenforge" target="_blank" rel="noreferrer">desktop recorder</a> is free too, and complements this:
+        it records <em>you</em> using a machine; Reelforge records <em>the product</em> without anyone driving it.
+      </p>
+    </div>
+  </section>
+
+  <section class="pledge">
+    <div class="wrap">
+      <p class="eyebrow" data-reveal><span class="dot"></span>The licence</p>
+      <h2 data-reveal>Free forever means <em>free forever.</em></h2>
+      <div class="pledge-grid">
+        <div data-reveal><h3>MIT</h3><p>Fork it, rebrand it, sell services around it. No contributor licence agreement, no rug-pull.</p></div>
+        <div data-reveal><h3>No paid tier</h3><p>Webhooks, aspect ratios, privacy masking and the walkthrough are not "business plan" features.</p></div>
+        <div data-reveal><h3>No telemetry</h3><p>There is no analytics endpoint in the codebase. Your recordings stay in your <code>data/</code> folder.</p></div>
+        <div data-reveal><h3>Your face, not ours</h3><p>The watermark is a render option, off in a single flag — not a licence gate.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="start">
+    <div class="wrap start-grid">
+      <div data-reveal>
+        <p class="eyebrow"><span class="dot"></span>Quickstart</p>
+        <h2>Three commands to your first demo.</h2>
+        <p class="section-sub">Node 22+. No account, no key, no cloud. The bundled demo product is a small SaaS you can record immediately.</p>
+        <div class="code-card">
+          <div class="code-head"><span class="mono">terminal</span><button class="copy" type="button" data-copy target="quickstart-code">Copy</button></div>
+          <pre id="quickstart-code"><code>git clone https://github.com/Majeed-GitHub/reelforge.git
+cd reelforge &amp;&amp; npm install &amp;&amp; npx playwright install chromium
+npm run seed &amp;&amp; npm run dev</code></pre>
+        </div>
+        <p class="footnote">Or run it in a container: <code>docker run -p 4400:4400 -v reelforge-data:/data ghcr.io/majeed-github/reelforge:latest</code></p>
+      </div>
+      <div class="start-aside" data-reveal>
+        <h3>Then ask it for a demo</h3>
+        <p>From the dashboard, or straight from your agent over MCP:</p>
+        <div class="code-card code-card-sm">
+          <pre><code>create_demo({
+  url: "http://127.0.0.1:4402",
+  instruction: "Sign in, create a project, invite a teammate."
+})</code></pre>
+        </div>
+        <ul class="checks">
+          <li>Runs on Linux, macOS and Windows</li>
+          <li>Works with no model key at all</li>
+          <li>Verified by a 23-check end-to-end suite</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="footer">
+  <div class="wrap footer-grid">
+    <div>
+      <a class="wordmark" href="#top">
+        <span class="wordmark-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" width="20" height="20"><path d="M9 23V9h7.5a4.5 4.5 0 0 1 0 9H13l7 5" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </span>
+        Reelforge
+      </a>
+      <p class="footer-note">An open-source, self-hosted alternative to commercial demo agents. Record once, publish four ways.</p>
+    </div>
+    <nav aria-label="Product">
+      <h4>Product</h4>
+      <a href="#outputs">Outputs</a>
+      <a href="#features">Features</a>
+      <a href="#providers">Providers</a>
+      <a href="#compare">Comparison</a>
+    </nav>
+    <nav aria-label="Documentation">
+      <h4>Documentation</h4>
+      <a href="https://github.com/Majeed-GitHub/reelforge/blob/main/README.md">README</a>
+      <a href="https://github.com/Majeed-GitHub/reelforge/blob/main/docs/API.md">API &amp; MCP</a>
+      <a href="https://github.com/Majeed-GitHub/reelforge/blob/main/docs/DEPLOY.md">Deploy</a>
+      <a href="https://github.com/Majeed-GitHub/reelforge/blob/main/docs/FEATURES.md">Feature matrix</a>
+    </nav>
+    <nav aria-label="Project">
+      <h4>Project</h4>
+      <a href="https://github.com/Majeed-GitHub/reelforge">GitHub</a>
+      <a href="https://github.com/Majeed-GitHub/reelforge/issues">Issues</a>
+      <a href="https://github.com/Majeed-GitHub/reelforge/blob/main/LICENSE">MIT licence</a>
+      <a href="https://github.com/Majeed-GitHub/reelforge/releases">Releases</a>
+    </nav>
+  </div>
+  <div class="wrap footer-base">
+    <p>© <span data-year>2026</span> Shaik Majeed · MIT</p>
+    <p class="credit">Built with the DeepSeek Harness, using the GMI Cloud API.</p>
+  </div>
+</footer>
+
+<script src="app.js" defer></script>
+</body>
+</html>
