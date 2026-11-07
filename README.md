@@ -127,7 +127,7 @@ smoke test and CI never need credentials.
 | **Dashboard** | React: live progress, video player, transcript, Product Graph, articles, guides, environments, BYOK providers, webhooks. |
 | **In-app guide** | 3.9 KB gzip embeddable widget, shadow-DOM isolated, skips steps whose target moved and reports them. |
 | **Product Graph** | Flows deduplicated by signature, screens, controls, staleness detection on re-check. |
-| **Outputs** | MP4, SRT/VTT captions, GIF preview, public share page, **interactive walkthrough** (one self-contained HTML file), HMAC-signed webhooks (Slack-compatible). |
+| **Outputs** | MP4, SRT/VTT captions, GIF preview, public share page, **interactive walkthrough** (one self-contained HTML file), **embeddable player** with privacy-respecting view counts, HMAC-signed webhooks (Slack-compatible). |
 | **CLI** | `reelforge session` (capture an SSO/2FA sign-in without sharing the password), `mcp`, `init`, `doctor`. |
 | **Metering** | Director-parity credits (1 credit = 1 finished minute, 15 s minimum), off by default when self-hosted. |
 
@@ -205,6 +205,8 @@ any recorder).
 |---|---|
 | [FEATURES.md](docs/FEATURES.md) | Every feature, what paid tools charge for it, and why some are missing |
 | [ROADMAP.md](docs/ROADMAP.md) | An honest audit of what is still missing, and the order to do it |
+| [EMBED.md](docs/EMBED.md) | Embedding a demo in your own site, player params, analytics, privacy |
+| [site/](site) | The marketing site (GitHub Pages, no build step) and the promo composition |
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | What was reverse-engineered, and how it is built |
 | [VERIFICATION-V03.md](docs/VERIFICATION-V03.md) | v0.3 evidence: aspect ratios, ducking, redaction pixels, walkthrough |
 | [VERIFICATION.md](docs/VERIFICATION.md) | Every check, every number, and the honest gaps |
