@@ -131,12 +131,16 @@ if (!owner) fail('Could not determine the GitHub owner. Pass --owner YOUR_GITHUB
 // --- 1b. placeholders -------------------------------------------------------
 step('Pointing repository links at ' + full);
 const PLACEHOLDER = 'YOUR_GITHUB_USER';
+// Docker image references must be lowercase; compose ships a lowercase form.
+const LOWER_PLACEHOLDER = 'your-github-user';
 const touched = [];
 function rewrite(file) {
   if (!fs.existsSync(file)) return;
   const before = fs.readFileSync(file, 'utf8');
   if (!before.includes(PLACEHOLDER)) return;
-  fs.writeFileSync(file, before.split(PLACEHOLDER).join(owner));
+  const rewritten = before.split(PLACEHOLDER).join(owner).split(LOWER_PLACEHOLDER).join(owner.toLowerCase());
+  if (rewritten === before) return;
+  fs.writeFileSync(file, rewritten);
   touched.push(file);
 }
 for (const file of ['README.md', 'CONTRIBUTING.md', 'SECURITY.md', 'CHANGELOG.md']) rewrite(file);

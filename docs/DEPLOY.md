@@ -18,6 +18,11 @@ This guide covers, in order:
 8. [Security checklist before you expose it](#8-security-checklist-before-you-expose-it)
 9. [Operations: upgrades, logs, health](#9-operations)
 10. [Known deployment limitations](#10-known-deployment-limitations)
+11. [Platforms: what is verified where](#11-platforms-what-is-verified-where)
+
+Running it on a Mac or a Windows machine rather than a Linux server? Read
+[§11](#11-platforms-what-is-verified-where) first: it says exactly which halves of
+the pipeline CI proves on which OS, and what you need installed for narration.
 
 > Placeholder reminder: `YOUR_GITHUB_USER` in clone URLs and `your-github-user`
 > in image names are replaced when the project is published. Docker image
@@ -317,7 +322,7 @@ all. `(container)` marks the value the Docker image/compose sets for you.
 | `REELFORGE_LLM_API_KEY` | unset | Falls back to `OPENAI_API_KEY`. |
 | `REELFORGE_LLM_MODEL` | `gpt-4.1-mini` | Model name for the configured endpoint. |
 | `REELFORGE_LLM_TIMEOUT_MS` | `60000` | Per-call timeout for the planner. |
-| `REELFORGE_TTS_PROVIDER` | `auto` | `auto` → OpenAI (if key) → edge-tts (if installed) → Windows SAPI → silent. Or force `openai`, `elevenlabs`, `edge`, `sapi`, `none`. `(container: none)` |
+| `REELFORGE_TTS_PROVIDER` | `auto` | `auto` tries OpenAI → ElevenLabs → edge-tts → macOS `say` → Linux `espeak-ng`/`espeak`/`pico2wave`/`festival` → Windows SAPI → silent. Force any of those ids, or `none`. Per-OS requirements: [§11.3](#113-prerequisites-per-platform). `(container: none)` |
 | `REELFORGE_TTS_VOICE` | system default | Voice id/name for the chosen provider. |
 | `REELFORGE_TTS_MODEL` | `gpt-4o-mini-tts` | OpenAI TTS model. |
 | `OPENAI_API_KEY` | unset | Used by both the planner fallback and OpenAI TTS. |
@@ -567,3 +572,118 @@ Honest list — these are real today, not hypotheticals:
    than a durable queue. If you need guaranteed delivery, receive them in your
    own service and persist there. See `docs/VERIFICATION.md` for the current
    limitation list.
+
+---
+
+## 11. Platforms: what is verified where
+
+Reelforge is plain Node plus Chromium and ffmpeg, so it runs on Linux, macOS and
+Windows. Not every half of that claim is equally proven, so here is the actual
+map rather than a marketing sentence. Everything in the "CI" columns is a job in
+[`.github/workflows/ci.yml`](../.github/workflows/ci.yml); everything in the
+"locally verified" column is evidence recorded in
+[docs/VERIFICATION.md](VERIFICATION.md).
+
+### 11.1 The CI matrix
+
+| CI leg | Job | Steps that run |
+|---|---|---|
+| `ubuntu-latest` · Node **22** | `test` (`smoke: true`) | `npm ci` → typecheck (root + `packages/web` + `packages/agent` tsconfigs) → dashboard build → guide build → render self-test → provider self-test → Chromium install → `npm run test:mcp` → **`npm run smoke`** |
+| `ubuntu-latest` · Node **24** | `test` (`smoke: true`) | identical to the Node 22 Ubuntu leg |
+| `macos-latest` · Node **22** | `test` (`smoke: false`) | `npm ci` → typecheck → dashboard build → guide build → render self-test → provider self-test (no browser, no full smoke) |
+| `windows-latest` · Node **22** | `test` (`smoke: false`) | identical to the macOS leg |
+| `ubuntu-latest` (non-PR only) | `docker` | build the image, start it, assert `/api/health` and `/app/` from inside the container |
+
+Node 24 is crossed with Ubuntu only; macOS and Windows run the oldest supported
+Node (22). Adding the other three combinations would cost ~15 extra minutes of
+install time per push to catch things those two legs already catch.
+
+Every leg sets `REELFORGE_TTS_PROVIDER=none` and `REELFORGE_LLM_PROVIDER=none`:
+CI must pass on the offline planner and silent render, never on a runner's API
+key or a Windows voice that macOS does not have. The macOS and Windows legs exist
+for the parts that genuinely differ across platforms:
+
+- **ffmpeg/ffprobe resolution** — `ffmpeg-static` / `ffprobe-static` install a
+  different binary per OS and arch (`.exe` on Windows, ELF on Linux, Mach-O on
+  macOS). The render self-test calls the same `ffmpegPath()` / `ffprobePath()`
+  the product uses, so a broken resolution fails that leg.
+- **path handling** — separators, drive letters, and the `subtitles=` filter's
+  `C\:` escaping on Windows.
+- **macOS `say`** — a platform-only narration path. CI does *not* exercise it
+  (every leg forces `REELFORGE_TTS_PROVIDER=none`); it is proven by running the
+  render self-test locally with `REELFORGE_TTS_PROVIDER=auto` on a Mac. The
+  self-test skips its audio assertions when no provider is available, so the
+  macOS leg still fails loudly if the ffmpeg path is broken.
+- **the Windows process-tree kill** in `scripts/smoke.ts` / `scripts/dev.mjs`
+  (`taskkill /T /F` guarded by `process.platform === 'win32'`). Note: the Windows
+  CI leg does **not** run the smoke test, so that guard is not exercised in CI —
+  it is exercised by real Windows runs (see `docs/VERIFICATION.md`).
+
+### 11.2 What is verified, per platform
+
+| Platform | Build / typecheck / render pipeline | Full record → render → publish | Offline narration, no key |
+|---|---|---|---|
+| **Linux** (Ubuntu runner) | ✅ CI, every push | ✅ CI (`npm run smoke`, 23/23) and inside the Docker image | needs a system voice, see below |
+| **macOS** | ✅ CI, every push | ⚠️ **not run in CI** — run `npm run smoke` locally after `npx playwright install chromium` | ✅ built-in `say` |
+| **Windows** | ✅ CI, every push | ⚠️ **not run in CI**; verified on a real Windows 11 host (11-step demo, MP4, SAPI narration, 23/23 — `docs/VERIFICATION.md`) | ✅ built-in SAPI |
+| **Docker** (Linux containers) | ✅ CI `docker` job + local build/run | ✅ verified locally inside the image: `npm run smoke` 23/23 | none in the image → silent + captions, or a cloud/derived TTS |
+
+"Not run in CI" is not "unsupported": the browser pipeline is OS-independent
+Playwright, and the Windows path has full local verification. It is simply not
+part of the every-push contract — treat macOS/Windows recordings as
+supported-but-not-CI-enforced, and open an issue with your platform details if
+they fail.
+
+### 11.3 Prerequisites per platform
+
+Common to all: **Node 22.18+ or 24** (see [§3](#3-bare-metal)), `npm ci`, and a
+Chromium for Playwright.
+
+| Platform | Chromium | Offline narration (no API key) | Neural voices |
+|---|---|---|---|
+| **Windows 10/11** | `npx playwright install chromium` | **Windows SAPI** — already installed; Reelforge drives it through `powershell.exe` (Windows PowerShell 5.1 / `System.Speech`). `pwsh` 7 may not ship `System.Speech`, which is why the code pins `powershell.exe`. | `pip install edge-tts` (invoked as `python -m edge_tts`) or an OpenAI/ElevenLabs key |
+| **macOS** | `npx playwright install chromium` | **`say`** — built in; Reelforge synthesises to AIFF and converts it with the bundled ffmpeg | `pip install edge-tts` or cloud keys |
+| **Linux** | `npx playwright install --with-deps chromium` (the `--with-deps` installs the apt libraries Chromium needs) | install a system voice: `sudo apt install espeak-ng` (also probes `espeak`, `pico2wave`, `festival`) | `pip install edge-tts` or cloud keys |
+| **Docker image** | baked into the image | none by default → **silent MP4 + burned captions** (`REELFORGE_TTS_PROVIDER=none`) | `-e OPENAI_API_KEY=…` / `-e ELEVENLABS_API_KEY=…`, or a derived image that installs `edge-tts` ([§5](#narration-on-linux)) |
+| **Any** | — | `REELFORGE_TTS_PROVIDER=none` = deterministic silent video with captions (what CI uses) | — |
+
+The `auto` narration chain tries providers in this order and picks the first
+available one: **OpenAI → ElevenLabs → edge-tts → macOS `say` → Linux
+`espeak-ng`/`espeak`/`pico2wave`/`festival` → Windows SAPI → `none`**. Forcing a
+provider that is not installed does not fail the render: it logs a warning and
+falls back to silent video with captions (`packages/render/src/tts.ts`). On a
+Linux host without a system voice, `espeak-ng` is the smallest way to get offline
+narration; `edge-tts` is the best free neural voice.
+
+### 11.4 Docker is Linux-only
+
+The image is based on `mcr.microsoft.com/playwright:v<n>-noble` (Ubuntu 24.04), so
+it is a **Linux container**: on macOS and Windows, Docker Desktop runs it inside
+its Linux VM, which is fine and is the recommended way to run Reelforge on a
+server or a workstation. The release workflow publishes both
+`linux/amd64` and `linux/arm64`, so an Apple Silicon Mac gets a native ARM image.
+What you cannot do with the image is record a product that only exists on the
+host's `localhost` — see [§10](#10-known-deployment-limitations) item 5.
+
+### 11.5 Prove it on your own machine
+
+The same commands CI runs, so you get the same answer on your OS:
+
+```bash
+npm ci
+npx playwright install --with-deps chromium      # Linux; omit --with-deps on macOS/Windows
+npm run typecheck
+npx vite build --config packages/web/vite.config.ts
+node packages/guide/build.mjs
+node packages/render/test/render-selftest.ts     # ffmpeg path — the OS-sensitive one
+node packages/providers/test/providers-selftest.ts
+npm run seed && npm run smoke                    # full pipeline (a few minutes)
+
+# Optional: prove the narration path on the OS you deploy to. CI always runs
+# with TTS disabled, so this is the part CI cannot prove for you.
+# Bash / zsh on macOS or Linux:
+REELFORGE_TTS_PROVIDER=auto node packages/render/test/render-selftest.ts
+# PowerShell on Windows (SAPI):
+#   $env:REELFORGE_TTS_PROVIDER='auto'; node packages/render/test/render-selftest.ts
+```
+

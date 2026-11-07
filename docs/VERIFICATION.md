@@ -3,7 +3,7 @@
 Every number below comes from a real run on this machine, not from a plan.
 
 **Machine:** Windows 11 · Node v25.8.1 (TypeScript run natively via type stripping) ·
-Chromium `chromium-1254` (Playwright 1.56) · ffmpeg 6.1.1 `essentials_build` (bundled via
+Chromium `chromium-1254` (Playwright 1.65.0) · ffmpeg 6.1.1 `essentials_build` (bundled via
 `ffmpeg-static`, includes libass) · narration via Windows SAPI (`Microsoft Zira Desktop`) ·
 **no** API keys of any kind, so the offline scripted planner drove the browser.
 
