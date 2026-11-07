@@ -3,8 +3,10 @@ import type { ArticleChannel, ArticleRow, EnvironmentRow, FlowRow } from '@core'
 import { api } from '../api.ts';
 import { channelLabel, formatRelative, hostOf, truncate } from '../format.ts';
 import { useLoader, useNow } from '../hooks.ts';
+import { usePrivacy } from '../privacy.ts';
 import { href, navigate } from '../router.ts';
 import { Markdown } from '../components/Markdown.tsx';
+import { Privacy } from '../components/Privacy.tsx';
 import {
   ArticleStatusPill,
   Banner,
@@ -36,6 +38,7 @@ export function ArticlesScreen({ id }: { id?: string }) {
 
   const article = detail.data;
   useNow(30_000);
+  const privacy = usePrivacy();
 
   const [mode, setMode] = useState<Mode>('preview');
   const [draftTitle, setDraftTitle] = useState('');
@@ -150,8 +153,8 @@ export function ArticlesScreen({ id }: { id?: string }) {
                     onClick={() => navigate(href.articles(row.id))}
                     aria-current={row.id === selectedId ? 'true' : undefined}
                   >
-                    <span className="flow-item-name" title={row.title}>
-                      {row.title}
+                    <span className="flow-item-name" title={privacy ? undefined : row.title}>
+                      <Privacy label="article title">{row.title}</Privacy>
                     </span>
                     <span className="flow-item-meta" style={{ gap: 6 }}>
                       <ChannelPill channel={row.channel} />
@@ -180,10 +183,12 @@ export function ArticlesScreen({ id }: { id?: string }) {
                     <div className="row wrap" style={{ marginBottom: 6 }}>
                       <ChannelPill channel={article.channel} />
                       <ArticleStatusPill status={article.status} />
-                      <span className="hint mono">/{article.slug}</span>
+                      <span className="hint mono">
+                        /<Privacy label="article slug">{article.slug}</Privacy>
+                      </span>
                     </div>
                     <h2 className="section-title" style={{ fontSize: 18, maxWidth: '60ch' }}>
-                      {mode === 'edit' ? draftTitle || article.title : article.title}
+                      <Privacy label="article title">{mode === 'edit' ? draftTitle || article.title : article.title}</Privacy>
                     </h2>
                     <p className="hint" style={{ marginTop: 3 }}>
                       Updated {formatRelative(article.updated_at)} · created {formatRelative(article.created_at)}
@@ -233,8 +238,14 @@ export function ArticlesScreen({ id }: { id?: string }) {
 
                   {mode === 'preview' ? (
                     <>
-                      {article.excerpt ? <p className="note">{article.excerpt}</p> : null}
-                      <Markdown source={article.body_md} />
+                      {article.excerpt ? (
+                        <Privacy variant="block" label="article excerpt">
+                          <p className="note">{article.excerpt}</p>
+                        </Privacy>
+                      ) : null}
+                      <Privacy variant="block" label="article body">
+                        <Markdown source={article.body_md} />
+                      </Privacy>
                     </>
                   ) : (
                     <div className="stack">

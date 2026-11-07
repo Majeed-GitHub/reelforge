@@ -3,8 +3,10 @@ import type { DemoRow, EnvironmentRow } from '@core';
 import { api } from '../api.ts';
 import { formatDuration, formatNumber, formatRelative, hostOf, truncate } from '../format.ts';
 import { useLoader, useNow, usePolling } from '../hooks.ts';
+import { usePrivacy } from '../privacy.ts';
 import { href, navigate } from '../router.ts';
 import { Banner, DemoStatusPill, EmptyState, ErrorPanel, SkeletonRows } from '../components/ui.tsx';
+import { Privacy } from '../components/Privacy.tsx';
 import { Icon } from '../components/icons.tsx';
 
 export function DemosScreen() {
@@ -114,6 +116,7 @@ export function DemosScreen() {
 
 function DemoTableRow({ row, environment }: { row: DemoRow; environment?: EnvironmentRow }) {
   const open = () => navigate(href.demo(row.id));
+  const privacy = usePrivacy();
   return (
     <tr
       data-link=""
@@ -134,11 +137,11 @@ function DemoTableRow({ row, environment }: { row: DemoRow; environment?: Enviro
         </div>
       </td>
       <td>
-        <div className="cell-title" title={row.instruction}>
-          {truncate(row.instruction, 88)}
+        <div className="cell-title" title={privacy ? undefined : row.instruction}>
+          <Privacy label="demo instruction">{truncate(row.instruction, 88)}</Privacy>
         </div>
         <div className="hint mono" style={{ marginTop: 2 }}>
-          {truncate(hostOf(row.target_url), 40)}
+          <Privacy label="target URL">{truncate(hostOf(row.target_url), 40)}</Privacy>
         </div>
       </td>
       <td className="cell-num">{formatDuration(row.duration_ms)}</td>
@@ -148,7 +151,9 @@ function DemoTableRow({ row, environment }: { row: DemoRow; environment?: Enviro
       </td>
       <td className="cell-num">
         {environment ? (
-          <span title={environment.base_url}>{truncate(environment.name, 26)}</span>
+          <span title={privacy ? undefined : environment.base_url}>
+            <Privacy label="environment name">{truncate(environment.name, 26)}</Privacy>
+          </span>
         ) : row.environment_id ? (
           <span className="mono dim">{truncate(row.environment_id, 14)}</span>
         ) : (

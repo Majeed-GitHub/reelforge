@@ -1,6 +1,7 @@
 import { maskKey } from '../api.ts';
 import { href } from '../router.ts';
 import { Icon } from './icons.tsx';
+import { PrivacyToggle } from './Privacy.tsx';
 
 export type HealthState = {
   status: 'checking' | 'online' | 'offline';
@@ -10,10 +11,22 @@ export type HealthState = {
 
 /**
  * Top bar: who you are recording for (workspace), whether the API is answering,
- * and which key this browser is using. The API-key affordance always links to
- * Settings instead of hiding state.
+ * which key this browser is using, and the privacy-screen switch that hides
+ * demo content from anyone watching your shared screen.
  */
-export function TopBar({ workspace, health, apiKey }: { workspace: string; health: HealthState; apiKey: string }) {
+export function TopBar({
+  workspace,
+  health,
+  apiKey,
+  privacy,
+  onTogglePrivacy
+}: {
+  workspace: string;
+  health: HealthState;
+  apiKey: string;
+  privacy: boolean;
+  onTogglePrivacy: () => void;
+}) {
   const healthLabel = health.status === 'online' ? 'API online' : health.status === 'offline' ? 'API unreachable' : 'Checking API';
   const healthClass =
     health.status === 'online' ? 'pill pill-complete' : health.status === 'offline' ? 'pill pill-failed' : 'pill pill-neutral';
@@ -40,6 +53,7 @@ export function TopBar({ workspace, health, apiKey }: { workspace: string; healt
             No API key
           </a>
         )}
+        <PrivacyToggle enabled={privacy} onToggle={onTogglePrivacy} />
       </div>
     </header>
   );

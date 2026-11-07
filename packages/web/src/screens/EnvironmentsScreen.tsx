@@ -5,6 +5,7 @@ import { api } from '../api.ts';
 import type { LoginCode, VerifyResult } from '../api.ts';
 import { formatDateTime, formatRelative, hostOf } from '../format.ts';
 import { confirmAction, useLoader } from '../hooks.ts';
+import { Privacy } from '../components/Privacy.tsx';
 import { Banner, CodeBlock, CopyButton, EmptyState, ErrorPanel, Field, Pill, SkeletonRows } from '../components/ui.tsx';
 import { Icon } from '../components/icons.tsx';
 
@@ -307,10 +308,10 @@ function EnvironmentCard({ environment, onChanged }: { environment: EnvironmentV
             ) : null}
           </div>
           <h2 className="section-title" style={{ fontSize: 16 }}>
-            {environment.name}
+            <Privacy label="environment name">{environment.name}</Privacy>
           </h2>
           <p className="hint mono" style={{ marginTop: 2 }}>
-            {environment.base_url}
+            <Privacy label="environment base URL">{environment.base_url}</Privacy>
           </p>
         </div>
         <div className="row" style={{ flexShrink: 0 }}>
@@ -410,7 +411,7 @@ function EnvironmentCard({ environment, onChanged }: { environment: EnvironmentV
 
         <div className="row-between" style={{ borderTop: '1px solid var(--line)', paddingTop: 10 }}>
           <span className="hint">
-            Saved {formatRelative(environment.created_at)} · {hostOf(environment.base_url)}
+            Saved {formatRelative(environment.created_at)} · <Privacy label="environment host">{hostOf(environment.base_url)}</Privacy>
           </span>
           <span className="hint mono" style={{ fontSize: 11 }}>
             {environment.id}

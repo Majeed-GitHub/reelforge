@@ -1733,6 +1733,170 @@ a.link:hover {
 }
 .provider-filter { max-width: 320px; }
 
+/* ---------------------------------------------------------------------------
+   v0.3 — privacy screen
+   Masking is a blur plus a neutral plate so blurred glyphs cannot be read from
+   their shapes. Nothing is display:none, so no layout jumps.
+   --------------------------------------------------------------------------- */
+:root {
+  --privacy-bg: #1e252d;
+}
+
+.privacy {
+  position: relative;
+  border-radius: 4px;
+  transition: background-color 140ms ease;
+}
+
+.privacy--text {
+  display: inline;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+.privacy--block {
+  display: block;
+}
+
+.privacy--image {
+  display: inline-block;
+  overflow: hidden;
+  border-radius: 6px;
+  line-height: 0;
+}
+
+.privacy--fill {
+  display: block;
+  overflow: hidden;
+  border-radius: var(--r-lg);
+}
+
+.privacy-content {
+  transition: filter 140ms ease, opacity 140ms ease;
+}
+
+.privacy--block > .privacy-content,
+.privacy--image > .privacy-content,
+.privacy--fill > .privacy-content {
+  display: block;
+}
+
+.privacy.is-masked {
+  background: var(--privacy-bg);
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+.privacy.is-masked .privacy-content {
+  filter: blur(6px);
+  user-select: none;
+}
+
+/* Screenshots and posters need a heavier blur: block shapes survive 6px. */
+.privacy--image.is-masked .privacy-content,
+.privacy--fill.is-masked .privacy-content {
+  filter: blur(9px);
+  opacity: 0.5;
+}
+
+.privacy.is-peeking {
+  background: transparent;
+  box-shadow: none;
+  cursor: auto;
+}
+
+.privacy.is-peeking .privacy-content {
+  filter: none;
+  opacity: 1;
+  user-select: auto;
+}
+
+.privacy-hint {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 2;
+  padding: 2px 8px;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  background: rgba(8, 9, 11, 0.74);
+  color: var(--text-2);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+.privacy-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  background: var(--panel-2);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 550;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+.privacy-toggle:hover {
+  background: var(--panel-3);
+  color: var(--text);
+}
+.privacy-toggle[aria-pressed="true"] {
+  background: var(--accent);
+  border-color: transparent;
+  color: var(--accent-ink);
+  font-weight: 650;
+}
+.privacy-toggle[aria-pressed="true"]:hover {
+  background: var(--accent-hover);
+  color: var(--accent-ink);
+}
+
+.privacy-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 28px;
+  border-bottom: 1px solid var(--accent-line);
+  background: rgba(255, 92, 56, 0.07);
+  color: var(--text-2);
+  font-size: 12.5px;
+}
+.privacy-banner p {
+  margin: 0;
+  min-width: 0;
+}
+.privacy-banner-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px rgba(255, 92, 56, 0.16);
+}
+
+@media (max-width: 760px) {
+  .privacy-toggle-label {
+    display: none;
+  }
+  .privacy-toggle {
+    width: 28px;
+    padding: 0;
+    justify-content: center;
+  }
+  .privacy-banner {
+    padding: 9px 16px;
+    font-size: 12px;
+  }
+}
+
 /* v0.3 — output framing picker (new demo form) */
 .aspect-seg {
   display: grid;

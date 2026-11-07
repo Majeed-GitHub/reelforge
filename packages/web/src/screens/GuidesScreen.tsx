@@ -3,7 +3,9 @@ import type { GuideRow } from '@core';
 import { api, apiOrigin } from '../api.ts';
 import { formatRelative, parseJsonField, truncate } from '../format.ts';
 import { useLoader, useNow } from '../hooks.ts';
+import { usePrivacy } from '../privacy.ts';
 import { href, navigate } from '../router.ts';
+import { Privacy } from '../components/Privacy.tsx';
 import {
   Banner,
   CodeBlock,
@@ -43,6 +45,7 @@ export function GuidesScreen({ id }: { id?: string }) {
 
   const guide = detail.data;
   useNow(30_000);
+  const privacy = usePrivacy();
 
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<unknown>(null);
@@ -121,15 +124,15 @@ export function GuidesScreen({ id }: { id?: string }) {
                     onClick={() => navigate(href.guides(row.id))}
                     aria-current={row.id === selectedId ? 'true' : undefined}
                   >
-                    <span className="flow-item-name" title={row.name}>
-                      {row.name}
+                    <span className="flow-item-name" title={privacy ? undefined : row.name}>
+                      <Privacy label="guide name">{row.name}</Privacy>
                     </span>
                     <span className="flow-item-meta">
                       <Pill tone={row.status === 'live' ? 'good' : 'draft'} dot={row.status === 'live'}>
                         {row.status === 'live' ? 'Live' : 'Draft'}
                       </Pill>
                       <span className="mono" style={{ fontSize: 11 }}>
-                        {truncate(row.embed_key, 16)}
+                        <Privacy label="guide embed key">{truncate(row.embed_key, 16)}</Privacy>
                       </span>
                     </span>
                     <span className="hint">updated {formatRelative(row.updated_at)}</span>
@@ -157,10 +160,12 @@ export function GuidesScreen({ id }: { id?: string }) {
                         <Pill tone={live ? 'good' : 'draft'} dot={live}>
                           {live ? 'Live' : 'Draft'}
                         </Pill>
-                        <span className="hint mono">embed key {guide.embed_key}</span>
+                        <span className="hint mono">
+                          embed key <Privacy label="guide embed key">{guide.embed_key}</Privacy>
+                        </span>
                       </div>
                       <h2 className="section-title" style={{ fontSize: 18 }}>
-                        {guide.name}
+                        <Privacy label="guide name">{guide.name}</Privacy>
                       </h2>
                       <p className="hint" style={{ marginTop: 3 }}>
                         {steps.length} step{steps.length === 1 ? '' : 's'} · updated {formatRelative(guide.updated_at)}
@@ -184,7 +189,9 @@ export function GuidesScreen({ id }: { id?: string }) {
                       <p className="eyebrow" style={{ marginBottom: 8 }}>
                         Embed snippet
                       </p>
-                      <CodeBlock code={snippet} label="Paste before </body> on every page the guide should run on" />
+                      <Privacy variant="block" label="guide embed snippet">
+                        <CodeBlock code={snippet} label="Paste before </body> on every page the guide should run on" />
+                      </Privacy>
                       <p className="hint" style={{ marginTop: 8 }}>
                         The widget fetches <code>GET /api/guides/embed/{guide.embed_key}</code> from the script's own origin, so the
                         same snippet works on any domain you serve. It renders inside a shadow root — no style leaks either way — and
@@ -243,7 +250,7 @@ export function GuidesScreen({ id }: { id?: string }) {
                     rows={[
                       { key: 'ID', value: <span className="mono">{guide.id}</span> },
                       { key: 'Status', value: <Pill tone={live ? 'good' : 'draft'}>{live ? 'Live' : 'Draft'}</Pill> },
-                      { key: 'Embed key', value: <span className="mono">{guide.embed_key}</span> },
+                      { key: 'Embed key', value: <Privacy label="guide embed key"><span className="mono">{guide.embed_key}</span></Privacy> },
                       { key: 'Environment', value: guide.environment_id },
                       { key: 'Flow', value: guide.flow_id ?? <span className="dim">—</span> },
                       { key: 'Created', value: formatRelative(guide.created_at) },

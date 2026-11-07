@@ -79,6 +79,12 @@ const providersState = () => ({
   }
 });
 
+const SHOT =
+  'data:image/svg+xml;utf8,' +
+  encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="128" height="80"><rect width="128" height="80" fill="#14171c"/><rect x="10" y="12" width="70" height="6" rx="3" fill="#2b323b"/><rect x="10" y="26" width="108" height="40" rx="6" fill="#1a2027" stroke="#2b323b"/></svg>'
+  );
+
 const demo = {
   id: 'dem_v02',
   workspace_id: 'ws_1',
@@ -96,7 +102,23 @@ const demo = {
   outcome_json: JSON.stringify({ goalMet: true, stepsCompleted: 11, whatWasShown: ['Signed in', 'Created a project'] }),
   options_json: JSON.stringify({ options: { language: 'en', fps: 30 } }),
   created_at: new Date().toISOString(),
-  steps: [],
+  steps: [
+    {
+      demo_id: 'dem_v02',
+      idx: 0,
+      kind: 'click',
+      narration: 'Open the new project form.',
+      started_at_ms: 0,
+      ended_at_ms: 1400,
+      selector: '[data-testid="new-project"]',
+      role: 'link',
+      name: 'New project',
+      box_json: JSON.stringify({ x: 120, y: 240, width: 180, height: 40 }),
+      url: 'http://127.0.0.1:4402/app',
+      screenshot_path: null,
+      screenshotUrl: SHOT
+    }
+  ],
   pollAfterSeconds: null
 };
 
@@ -442,6 +464,149 @@ try {
     (await page.getByRole('button', { name: 'Walkthrough', exact: true }).isDisabled()) && (pendingTitle ?? '').includes('once the demo finishes'),
     pendingTitle ?? ''
   );
+
+  // ---------------------------------------------------------- privacy screen
+  await page.goto(`${base}/app/#/demos/dem_v02`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('text=Share');
+  await page.screenshot({ path: path.join(artifacts, 'privacy-off.png'), fullPage: false });
+
+  await page.goto(`${base}/app/#/demos`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('text=Sign in, create a project');
+  const privacyToggle = page.getByRole('button', { name: 'Privacy screen', exact: true });
+  check(
+    'privacy: toggle exists and is off by default',
+    (await privacyToggle.count()) === 1 && (await privacyToggle.getAttribute('aria-pressed')) === 'false'
+  );
+
+  const tableHeightBefore = await page.locator('.table-wrap').evaluate((element) => element.getBoundingClientRect().height);
+  await privacyToggle.click();
+  await page.waitForFunction(() => document.documentElement.getAttribute('data-privacy') === 'on');
+  await page.waitForSelector('.privacy-banner');
+  check(
+    'privacy: switching on sets data-privacy and aria-pressed',
+    (await privacyToggle.getAttribute('aria-pressed')) === 'true' &&
+      (await page.evaluate(() => document.documentElement.getAttribute('data-privacy'))) === 'on'
+  );
+  const bannerText = await page.locator('.privacy-banner').innerText();
+  check('privacy: banner states the mode and the shortcut', bannerText.includes('content is masked') && bannerText.includes('Shift+P'));
+  check('privacy: toggling shows a toast', await page.isVisible('text=Privacy screen on — content masked.'));
+  await page.waitForFunction(() => !document.querySelector('.toast-stack'), undefined, { timeout: 6000 });
+  const tableHeightAfter = await page.locator('.table-wrap').evaluate((element) => element.getBoundingClientRect().height);
+  check(
+    'privacy: masking does not change layout',
+    Math.abs(tableHeightAfter - tableHeightBefore) <= 2,
+    `${tableHeightBefore} -> ${tableHeightAfter}`
+  );
+
+  await page.goto(`${base}/app/#/demos/dem_v02`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('.privacy.is-masked');
+  await page.screenshot({ path: path.join(artifacts, 'privacy-on.png'), fullPage: false });
+
+  const maskedReport = await page.evaluate(() =>
+    Array.from(document.querySelectorAll('.privacy.is-masked')).map((node) => {
+      const content = node.querySelector('.privacy-content');
+      return {
+        text: (node.textContent || '').trim(),
+        filter: content ? getComputedStyle(content).filter : getComputedStyle(node).filter,
+        hasImage: !!node.querySelector('img'),
+        hasVideo: !!node.querySelector('video'),
+        display: getComputedStyle(node).display
+      };
+    })
+  );
+  const blurred = (entry) => typeof entry.filter === 'string' && entry.filter.includes('blur');
+  check(
+    'privacy: demo instruction is blurred',
+    maskedReport.some((entry) => entry.text.includes('Sign in, create a project') && blurred(entry))
+  );
+  check('privacy: target URL is blurred', maskedReport.some((entry) => entry.text.includes('127.0.0.1') && blurred(entry)));
+  check('privacy: step thumbnails are blurred', maskedReport.some((entry) => entry.hasImage && blurred(entry)));
+  check('privacy: the video poster is blurred', maskedReport.some((entry) => entry.hasVideo && blurred(entry)));
+  check(
+    'privacy: masked content stays in the DOM and visible to layout',
+    maskedReport.length >= 4 && maskedReport.every((entry) => entry.display !== 'none')
+  );
+
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  const reducedDuration = await page
+    .locator('.privacy-content')
+    .first()
+    .evaluate((element) => getComputedStyle(element).transitionDuration);
+  check(
+    'privacy: reduced motion removes the blur transition',
+    reducedDuration.split(',').every((value) => parseFloat(value) <= 0.001),
+    reducedDuration
+  );
+  await page.emulateMedia({ reducedMotion: null });
+
+  const maskedInstruction = page.locator('.privacy.is-masked').filter({ hasText: 'Sign in, create a project' }).first();
+  await maskedInstruction.click();
+  await page.waitForFunction(() => {
+    const node = Array.from(document.querySelectorAll('.privacy.is-peeking')).find((element) =>
+      (element.textContent || '').includes('Sign in, create a project')
+    );
+    if (!node) return false;
+    const content = node.querySelector('.privacy-content');
+    return !!content && getComputedStyle(content).filter === 'none';
+  });
+  check('privacy: clicking a masked item reveals it', true);
+
+  await page.waitForTimeout(4400);
+  check(
+    'privacy: it re-masks after four seconds',
+    await page.evaluate(() => {
+      const node = Array.from(document.querySelectorAll('.privacy')).find((element) =>
+        (element.textContent || '').includes('Sign in, create a project')
+      );
+      if (!node) return false;
+      const content = node.querySelector('.privacy-content');
+      return (
+        node.classList.contains('is-masked') &&
+        !node.classList.contains('is-peeking') &&
+        !!content &&
+        getComputedStyle(content).filter.includes('blur')
+      );
+    })
+  );
+
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForSelector('.privacy-banner');
+  check(
+    'privacy: the setting survives a reload via localStorage',
+    (await page.evaluate(() => document.documentElement.getAttribute('data-privacy'))) === 'on'
+  );
+
+  await page.evaluate(() => {
+    const active = document.activeElement;
+    if (active instanceof HTMLElement) active.blur();
+  });
+  await page.keyboard.press('Shift+P');
+  await page.waitForFunction(() => document.documentElement.getAttribute('data-privacy') !== 'on');
+  check('privacy: Shift+P turns it off', (await page.evaluate(() => document.documentElement.getAttribute('data-privacy'))) === null);
+
+  await page.keyboard.press('Shift+P');
+  await page.waitForFunction(() => document.documentElement.getAttribute('data-privacy') === 'on');
+  await page.goto(`${base}/app/#/settings`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('#settings-key');
+  await page.locator('#settings-key').focus();
+  await page.keyboard.press('Shift+P');
+  await page.waitForTimeout(300);
+  check(
+    'privacy: Shift+P is ignored while focus is in a field',
+    (await page.evaluate(() => document.documentElement.getAttribute('data-privacy'))) === 'on'
+  );
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${base}/app/#/demos`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('.privacy-banner');
+  check(
+    'privacy: no horizontal overflow at 390px with privacy on',
+    await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)
+  );
+
+  await page.getByRole('button', { name: 'Privacy screen', exact: true }).click();
+  await page.waitForFunction(() => document.documentElement.getAttribute('data-privacy') !== 'on');
+  check('privacy: switching off clears every mask', (await page.locator('.privacy.is-masked').count()) === 0);
 
   // ---------------------------------------------------------------- onboard
   const fresh = await browser.newContext({ viewport: { width: 1280, height: 900 } });

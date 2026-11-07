@@ -2,15 +2,24 @@
 
 A 30-second, 1920×1080 motion-graphics promo built entirely from this repository's
 own stack: an HTML/CSS/JS composition recorded by Playwright Chromium, encoded by
-the bundled `ffmpeg-static`, and verified with `ffprobe-static`.
+the bundled `ffmpeg-static`, and verified with `ffprobe-static`. The same
+timeline engine also ships vertical and square cuts (story / post / 4:5) and a
+lightweight 720p hero.
 
 | File | What it is |
 |---|---|
 | [`promo.html`](promo/promo.html) | The whole composition. Self-contained 1920×1080 canvas, no external assets, deterministic JS timeline. |
 | [`record.mjs`](promo/record.mjs) | Recorder + encoder + verifier. One command reproduces the deliverables. |
-| [`reelforge-promo.mp4`](reelforge-promo.mp4) | The deliverable: 30.000 s, 1920×1080, H.264 High/yuv420p, AAC 48 kHz, faststart, ~1.9 MB. |
+| [`reelforge-promo.mp4`](reelforge-promo.mp4) | The 16:9 master: 30.000 s, 1920×1080, H.264 High/yuv420p, AAC 48 kHz, faststart, ~1.9 MB. |
 | [`reelforge-promo-poster.jpg`](reelforge-promo-poster.jpg) | Poster frame (wordmark + tagline, captured at 2.4 s). |
-| [`promo/frames/`](promo/frames/) | Eight storyboard frames spread across the video, for review and site thumbnails. |
+| [`reelforge-promo-720p.mp4`](reelforge-promo-720p.mp4) | Lightweight hero: 1280×720, 30 s, 0.77 MB, mono AAC tone bed. |
+| [`promo/promo-story.html`](promo/promo-story.html) | 1080×1920 story cut (IG story + WhatsApp status), 18 s, safe areas respected. |
+| [`promo/promo-square.html`](promo/promo-square.html) | 1080×1080 feed post cut, 18 s. |
+| [`promo/promo-4x5.html`](promo/promo-4x5.html) | 1080×1350 feed cut, 18 s. |
+| [`promo/social.css`](promo/social.css) + [`promo/social.js`](promo/social.js) | Shared styles + 18 s timeline engine behind the three social cuts. |
+| [`promo/record-social.mjs`](promo/record-social.mjs) | One command for all social cuts + the 720p hero. |
+| [`reelforge-story-9x16.mp4`](reelforge-story-9x16.mp4), [`reelforge-post-1x1.mp4`](reelforge-post-1x1.mp4), [`reelforge-feed-4x5.mp4`](reelforge-feed-4x5.mp4) | The social outputs (+ a poster JPG each). |
+| [`promo/frames/`](promo/frames/) | Eight 16:9 storyboard frames plus three review frames per social cut. |
 
 No music file is shipped: the optional tone bed is generated from two ffmpeg
 sine waves (220 Hz + 329.63 Hz, 0.1 Hz tremolo, fades), so there is nothing to
@@ -114,3 +123,60 @@ at −34.6 dB mean (subtle, not clipping), file under the 10 MB budget.
 - The only non-deterministic input is system font rasterisation (the composition
   uses the system UI font stack and a system mono stack). Frames are otherwise
   reproducible byte-for-byte from the same browser build.
+
+## Social cuts — story / post / 4:5 (18 s)
+
+One command renders every social cut **and** the lightweight 720p hero:
+
+```sh
+node docs/media/promo/record-social.mjs          # --fps 60 · --silent · --keep
+```
+
+The three HTML files are thin wrappers around the shared `social.css` +
+`social.js` timeline engine (local files, still zero network requests); the
+format is declared as `<body data-format="story|square|feed45">`. `social.js`
+exposes the same `?t=` seek, `window.__start()` and `window.__ready` contract as
+the 16:9 composition.
+
+| Variant | File | Dimensions | Duration | Bytes |
+|---|---|---|---|---|
+| story 9:16 (IG story + WhatsApp status) | `reelforge-story-9x16.mp4` | 1080×1920 | 18.00 s | 800,249 (0.76 MB) |
+| post 1:1 (IG feed) | `reelforge-post-1x1.mp4` | 1080×1080 | 18.00 s | 803,533 (0.77 MB) |
+| feed 4:5 (IG feed) | `reelforge-feed-4x5.mp4` | 1080×1350 | 18.00 s | 786,772 (0.75 MB) |
+| hero 720p (from the 16:9 master) | `reelforge-promo-720p.mp4` | 1280×720 | 30.02 s | 809,326 (0.77 MB) |
+
+Posters at 8.6 s: `reelforge-story-9x16-poster.jpg`, `reelforge-post-1x1-poster.jpg`,
+`reelforge-feed-4x5-poster.jpg`. Review frames: `promo/frames/{story,post,feed}/frame-01..03.jpg`
+(at 1.5 s, 8.6 s, 15.5 s).
+
+### Safe areas
+
+Instagram/WhatsApp cover the top 250 px and bottom 250 px of a 1080×1920 story,
+so every scene is a flex column inside the middle **250 … 1670 px** band (CSS
+`--safe-top` / `--safe-bottom`). The recorder seeks to five points in the
+storyboard and measures the real bounding boxes of the hook lines, typed
+instruction, URL chip, output cards, provider headline/sub/marquee and end-card
+text, asserting `top ≥ 250` and `bottom ≤ 1670`. The square and 4:5 cuts use
+64 px / 80 px safe bands. Measured story content spans y 278…1394 px.
+
+### Storyboard (18 s, same timeline for all three canvases)
+
+| Time | Beat | Detail |
+|---|---|---|
+| 0.00–2.50 | Hook | *"Your product demos, written by the product."* on three lines, last line ember; lines ease up at 0.16/0.30/0.44 s; hold to 2.5. |
+| 2.50–6.45 | Instruction → tap → zoom | Label; *"Sign in, create a project, invite a teammate."* types on 3.0–4.35 s; `your-product.com` chip 4.45 s; browser frame 4.2–4.9 s; ember tap ripple at 5.0 s; the page camera-zooms 5.2–6.25 s. |
+| 6.15–10.30 | Four outputs | *One capture, four outputs*: Video · Article · Walkthrough · Guide. Story = four stacked cards sliding in (186 px each, ember spine growing); square/feed = 2×2 grid. Stagger 6.45 s + 0.24 s. The story-specific hero moment. |
+| 10.00–13.80 | Provider wall | *31 model providers* + *"Bring your own key — or run fully offline."* Two compact linear marquees stream (free+local / paid) at 54 / 72 px/s. |
+| 13.50–18.00 | End card | REELFORGE 13.65 s; ember rule 13.9 s; *"Open source · MIT · Free forever"* 14.05 s; `github.com/Majeed-GitHub/reelforge` 14.3 s; **↳ link in bio** 14.6 s; fade to black 17.25–18 s. |
+
+### Verification
+
+`node docs/media/promo/record-social.mjs` → **SOCIAL RECORD PASS — 42/42 checks**.
+Per variant it asserts: composition meta + exact stage size (no scroll), key text
+inside the safe area, end card contains the repo URL on-screen (and 16.9–18.2 %
+bright pixels measured inside the URL box of `frame-03.jpg`), zero external
+http(s) requests, zero page errors, exact dimensions + H.264/yuv420p, duration
+18 s ±1 s, < 4 MB, audio present, poster rendered (not blank), 3/3 frames.
+The 720p hero is transcoded from `reelforge-promo.mp4` at CRF 26 with 48 kHz mono
+audio and checked for 1280×720, ~30 s, < 900 KB and an audible tone bed.
+

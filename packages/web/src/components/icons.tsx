@@ -31,7 +31,9 @@ export type IconName =
   | 'info'
   | 'trash'
   | 'play'
-  | 'upload';
+  | 'upload'
+  | 'eye'
+  | 'eye-off';
 
 const PATHS: Record<IconName, ReactNode> = {
   demos: (
@@ -164,6 +166,19 @@ const PATHS: Record<IconName, ReactNode> = {
       <path d="M12 15.8V4.6" />
       <path d="m7.4 9.2 4.6-4.6 4.6 4.6" />
       <path d="M4.6 16.2v2.4a1.2 1.2 0 0 0 1.2 1.2h12.4a1.2 1.2 0 0 0 1.2-1.2v-2.4" />
+    </>
+  ),
+  eye: (
+    <>
+      <path d="M2.6 12S6.2 5.8 12 5.8 21.4 12 21.4 12 17.8 18.2 12 18.2 2.6 12 2.6 12z" />
+      <circle cx="12" cy="12" r="2.9" />
+    </>
+  ),
+  'eye-off': (
+    <>
+      <path d="M4 4l16 16" />
+      <path d="M9.9 5.9A9.7 9.7 0 0 1 12 5.8c5.8 0 9.4 6.2 9.4 6.2a17.6 17.6 0 0 1-3.3 3.8" />
+      <path d="M6.7 8.1A17.4 17.4 0 0 0 2.6 12s3.6 6.2 9.4 6.2c1.3 0 2.5-.3 3.5-.7" />
     </>
   )
 };

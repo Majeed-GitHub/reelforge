@@ -1,11 +1,13 @@
 import { Component, useCallback, useEffect, useState } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
 import { api, getApiKey, hasSeenOnboarding, markOnboarded, setApiKey } from './api.ts';
+import { privacyEnabled, setPrivacyEnabled, usePrivacy } from './privacy.ts';
 import type { Route } from './router.ts';
 import { navigate, sectionOf, useRoute } from './router.ts';
 import { Sidebar } from './components/Sidebar.tsx';
 import { TopBar } from './components/TopBar.tsx';
 import type { HealthState } from './components/TopBar.tsx';
+import { PrivacyBanner } from './components/Privacy.tsx';
 import { Banner } from './components/ui.tsx';
 import { Icon } from './components/icons.tsx';
 import { DemosScreen } from './screens/DemosScreen.tsx';
@@ -24,6 +26,35 @@ export function App() {
   const [onboarded, setOnboarded] = useState<boolean>(() => hasSeenOnboarding());
   const [health, setHealth] = useState<HealthState>({ status: 'checking' });
   const [workspace, setWorkspace] = useState('Default workspace');
+  const privacy = usePrivacy();
+  const [toast, setToast] = useState<string | null>(null);
+
+  const togglePrivacyMode = useCallback(() => {
+    const next = !privacyEnabled();
+    setPrivacyEnabled(next);
+    setToast(next ? 'Privacy screen on — content masked.' : 'Privacy screen off — content visible.');
+  }, []);
+
+  useEffect(() => {
+    if (!toast) return;
+    const id = window.setTimeout(() => setToast(null), 2800);
+    return () => window.clearTimeout(id);
+  }, [toast]);
+
+  // Shift+P toggles the privacy screen, except while typing into a field.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return;
+      if (event.key !== 'P' && event.key !== 'p') return;
+      const target = event.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target?.isContentEditable) return;
+      event.preventDefault();
+      togglePrivacyMode();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [togglePrivacyMode]);
 
   // Public health probe: drives the top-bar indicator, never blocks a screen.
   useEffect(() => {
@@ -107,13 +138,20 @@ export function App() {
       <Sidebar section={sectionOf(route)} />
 
       <div className="content">
-        <TopBar workspace={workspace} health={health} apiKey={apiKey} />
+        <TopBar workspace={workspace} health={health} apiKey={apiKey} privacy={privacy} onTogglePrivacy={togglePrivacyMode} />
+        {privacy ? <PrivacyBanner /> : null}
         <main id="main" className="main" tabIndex={-1}>
           <RouteBoundary key={routeKey(route)}>
             <Screen route={route} apiKey={apiKey} onKeyChange={connect} />
           </RouteBoundary>
         </main>
       </div>
+
+      {toast ? (
+        <div className="toast-stack" role="status" aria-live="polite">
+          <div className={`toast ${privacy ? 'toast-ok' : ''}`}>{toast}</div>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -15,7 +15,9 @@ import {
   toPercent
 } from '../format.ts';
 import { confirmAction, useCopy, useLoader, usePolling } from '../hooks.ts';
+import { usePrivacy } from '../privacy.ts';
 import { href, navigate } from '../router.ts';
+import { Privacy } from '../components/Privacy.tsx';
 import {
   Banner,
   CodeBlock,
@@ -54,6 +56,8 @@ export function DemoDetailScreen({ id }: { id: string }) {
   const [answering, setAnswering] = useState<string | null>(null);
   const [busy, setBusy] = useState<'cancel' | 'retry' | null>(null);
   const [actionError, setActionError] = useState<unknown>(null);
+  const [playerActive, setPlayerActive] = useState(false);
+  const privacy = usePrivacy();
 
   const outcome = useMemo(() => parseJsonField<DemoOutcome>(data?.outcome), [data?.outcome]);
   const failure = useMemo(() => parseJsonField<DemoFailure>(data?.failure), [data?.failure]);
@@ -176,12 +180,12 @@ export function DemoDetailScreen({ id }: { id: string }) {
               </>
             ) : null}
             <span className="hint dotsep" />
-            <span className="hint mono" title={data.target_url}>
-              {hostOf(data.target_url)}
+            <span className="hint mono" title={privacy ? undefined : data.target_url}>
+              <Privacy label="target URL">{hostOf(data.target_url)}</Privacy>
             </span>
           </div>
           <h1 className="page-title" style={{ maxWidth: '62ch' }}>
-            {data.instruction}
+            <Privacy label="demo instruction">{data.instruction}</Privacy>
           </h1>
           <p className="page-sub mono" style={{ fontSize: 12 }}>
             {data.id} · {data.target_type} target
@@ -232,18 +236,23 @@ export function DemoDetailScreen({ id }: { id: string }) {
           {/* -------------------------------------------------------- video */}
           {status === 'complete' && data.videoUrl ? (
             <section className="stack-sm">
-              <div className="player">
-                <video
-                  key={data.videoUrl}
-                  controls
-                  preload="metadata"
-                  poster={data.posterUrl ?? undefined}
-                  aria-label="Recorded demo video"
-                >
-                  <source src={data.videoUrl} type="video/mp4" />
-                  Your browser cannot play this MP4. The signed URL is below in the Raw tab.
-                </video>
-              </div>
+              <Privacy variant="fill" label="demo video poster" disabled={playerActive}>
+                <div className="player">
+                  <video
+                    key={data.videoUrl}
+                    controls
+                    preload="metadata"
+                    poster={data.posterUrl ?? undefined}
+                    aria-label="Recorded demo video"
+                    onPlay={() => setPlayerActive(true)}
+                    onPause={() => setPlayerActive(false)}
+                    onEnded={() => setPlayerActive(false)}
+                  >
+                    <source src={data.videoUrl} type="video/mp4" />
+                    Your browser cannot play this MP4. The signed URL is below in the Raw tab.
+                  </video>
+                </div>
+              </Privacy>
               <div className="row-between">
                 <span className="hint mono" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '62%' }}>
                   {data.videoUrl}
@@ -410,15 +419,17 @@ export function DemoDetailScreen({ id }: { id: string }) {
                             </div>
                           </div>
                           {step.screenshotUrl ? (
-                            <a
-                              className="thumb"
-                              href={step.screenshotUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              aria-label={`Open screenshot for step ${step.idx}`}
-                            >
-                              <img src={step.screenshotUrl} alt={`Step ${step.idx} screenshot`} loading="lazy" />
-                            </a>
+                            <Privacy variant="image" label={`screenshot for step ${step.idx}`}>
+                              <a
+                                className="thumb"
+                                href={step.screenshotUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                aria-label={`Open screenshot for step ${step.idx}`}
+                              >
+                                <img src={step.screenshotUrl} alt={`Step ${step.idx} screenshot`} loading="lazy" />
+                              </a>
+                            </Privacy>
                           ) : (
                             <span className="thumb" aria-hidden="true">
                               <span className="thumb-empty">no shot</span>
@@ -493,9 +504,11 @@ export function DemoDetailScreen({ id }: { id: string }) {
                 {
                   key: 'Target',
                   value: (
-                    <a className="link mono" href={data.target_url} target="_blank" rel="noreferrer" style={{ fontSize: 11.5 }}>
-                      {hostOf(data.target_url)}
-                    </a>
+                    <Privacy label="target URL">
+                      <a className="link mono" href={data.target_url} target="_blank" rel="noreferrer" style={{ fontSize: 11.5 }}>
+                        {hostOf(data.target_url)}
+                      </a>
+                    </Privacy>
                   )
                 }
               ]}

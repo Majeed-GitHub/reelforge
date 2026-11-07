@@ -870,6 +870,43 @@ try {
 
   await page.screenshot({ path: path.join(artifacts, 'new-demo.png'), fullPage: false });
 
+  // ---------------------------------------------------------- privacy screen
+  await page.getByRole('button', { name: 'Privacy screen', exact: true }).click();
+  await page.waitForFunction(() => document.documentElement.getAttribute('data-privacy') === 'on', undefined, { timeout: 5000 });
+
+  await check('privacy: article titles and body previews are masked', async () => {
+    await page.goto(`${base}/app/#/articles`, { waitUntil: 'networkidle' });
+    await page.waitForSelector('.privacy.is-masked', { timeout: 10000 });
+    const texts = await page.locator('.privacy.is-masked').evaluateAll((nodes) => nodes.map((node) => node.textContent ?? ''));
+    assert.ok(
+      texts.some((text) => text.includes('Create a project')),
+      'article title is wrapped in a masked block'
+    );
+    assert.ok(
+      texts.some((text) => text.includes('Here is how to create a project in Northwind')),
+      'article body preview is wrapped in a masked block'
+    );
+  });
+
+  await check('privacy: guide names and embed keys are masked', async () => {
+    await page.goto(`${base}/app/#/guides`, { waitUntil: 'networkidle' });
+    await page.waitForSelector('.privacy.is-masked', { timeout: 10000 });
+    const texts = await page.locator('.privacy.is-masked').evaluateAll((nodes) => nodes.map((node) => node.textContent ?? ''));
+    assert.ok(texts.some((text) => text.includes('Create your first project')), 'guide name is masked');
+    assert.ok(texts.some((text) => text.includes('ek_live_abc123')), 'embed key is masked');
+  });
+
+  await check('privacy: environment names and base URLs are masked', async () => {
+    await page.goto(`${base}/app/#/environments`, { waitUntil: 'networkidle' });
+    await page.waitForSelector('.privacy.is-masked', { timeout: 10000 });
+    const texts = await page.locator('.privacy.is-masked').evaluateAll((nodes) => nodes.map((node) => node.textContent ?? ''));
+    assert.ok(texts.some((text) => text.includes('Northwind')), 'environment name is masked');
+    assert.ok(texts.some((text) => text.includes('127.0.0.1:4402')), 'environment base URL is masked');
+  });
+
+  await page.getByRole('button', { name: 'Privacy screen', exact: true }).click();
+  await page.waitForFunction(() => document.documentElement.getAttribute('data-privacy') !== 'on', undefined, { timeout: 5000 });
+
   // --------------------------------------------------- API-down degradation
   {
     const downPage = await newPage();

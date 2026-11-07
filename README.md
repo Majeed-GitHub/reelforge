@@ -147,6 +147,17 @@ npm run mcp:stdio -- --api-key rg_…
 Then just ask: *"Record a demo of signing up on http://127.0.0.1:4402 and publish a
 help article from it."* See [docs/MCP.md](docs/MCP.md) for every tool.
 
+### Editor plugins (10 KB of text, no dependencies)
+
+| Host | Install | What you get |
+|---|---|---|
+| **Claude Code** | `claude --plugin-dir <repo>/plugins/claude-code` | `/record-demo`, `/publish-article`, `/demo-status` |
+| **OpenCode** | copy `plugins/opencode/opencode.json` into your config | the MCP server plus a no-op guard plugin |
+| **DeepSeek Harness** | copy `plugins/deepseek/SKILL.md` to `~/.agents/skills/reelforge/` | a skill that triggers on "record a demo" |
+
+All three just point the agent at `POST /api/mcp`; the API must be running and
+reachable from the agent process. See [docs/PLUGINS.md](docs/PLUGINS.md).
+
 Plain REST works too:
 
 ```bash
