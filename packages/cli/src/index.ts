@@ -4,6 +4,7 @@
  *
  *   reelforge session DIR-XXXX-XXXX-XXXX   capture a signed-in browser session
  *   reelforge mcp                          wire the MCP server into your agent
+ *   reelforge mcp-proxy --stdio            bridge Claude Desktop (stdio) to the API
  *   reelforge init                         install Playwright Chromium
  *   reelforge doctor                       check this machine
  *
@@ -28,6 +29,7 @@ Reelforge CLI
       --api-url <url>               API base (or $REELFORGE_API_URL)
       --api-key <key>               API key (or $REELFORGE_API_KEY)
 
+  reelforge mcp-proxy --stdio     bridge a stdio-only client (Claude Desktop) to the API
   reelforge mcp                   connect the MCP server to a coding agent
       --api-key <key>               API key (or $REELFORGE_API_KEY)
       --agent <name>                claude-code | cursor | claude-desktop (repeatable)
@@ -98,6 +100,11 @@ async function main(): Promise<void> {
       return;
     case 'mcp':
       await runMcp(flags);
+      return;
+    case 'mcp-proxy':
+      // stdio bridge for clients that cannot speak streamable HTTP
+      // (Claude Desktop). Side-effect module: it starts serving on import.
+      await import('./mcp-stdio.ts');
       return;
     case 'doctor':
       await runDoctor(flags);
