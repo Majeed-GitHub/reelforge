@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { apiV2 } from '../api.ts';
 import type { LlmProviderState, ProvidersState, ProviderTestResult } from '../api.ts';
 import { Banner, CodeBlock, ErrorPanel, Field, Pill, SkeletonRows } from '../components/ui.tsx';

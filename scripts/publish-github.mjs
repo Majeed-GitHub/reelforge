@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env node
+#!/usr/bin/env node
 /**
  * Publishes this repository to GitHub in one command.
  *
@@ -128,6 +128,9 @@ console.log(`  authenticated${login ? ` as ${login}` : ''}`);
 const owner = String(OWNER || login || '');
 if (!owner) fail('Could not determine the GitHub owner. Pass --owner YOUR_GITHUB_USER.');
 
+// --- 2. repo -----------------------------------------------------------------
+const full = `${owner}/${REPO}`;
+
 // --- 1b. placeholders -------------------------------------------------------
 step('Pointing repository links at ' + full);
 const PLACEHOLDER = 'YOUR_GITHUB_USER';
@@ -170,8 +173,6 @@ if (touched.length > 0) {
   console.log('  nothing to rewrite');
 }
 
-// --- 2. repo -----------------------------------------------------------------
-const full = `${owner}/${REPO}`;
 step(`Ensuring ${full} exists`);
 const exists = trySh('gh', ['repo', 'view', full, '--json', 'name']);
 if (!exists.ok) {

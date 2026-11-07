@@ -1,4 +1,4 @@
-﻿import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 
 export const VERSION = '0.2.0';
 export const SERVICE = 'reelforge';

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Builds a contact sheet from a rendered demo so a human can eyeball the whole
  * video in one image (and so a non-vision agent can still hand over evidence).
  *
