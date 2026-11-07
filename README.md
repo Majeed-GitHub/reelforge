@@ -206,6 +206,7 @@ any recorder).
 | [OUTPUTS.md](docs/OUTPUTS.md) | Webhooks, share pages, GIF, captions |
 | [DEPLOY.md](docs/DEPLOY.md) | Docker, bare metal, reverse proxy, backups |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Dev setup and PR rules |
+| [PROJECT-REPORT.md](docs/PROJECT-REPORT.md) | The written report: methodology, design decisions, results |
 
 ## Credits
 
