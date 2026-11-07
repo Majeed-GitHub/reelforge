@@ -125,6 +125,13 @@ html, body {
   background: linear-gradient(90deg, transparent, var(--ember), transparent);
   box-shadow: 0 0 24px 2px var(--ember-soft);
 }
+/* mask reveal: the wordmark rises from behind this clip instead of
+   animating its own tracking (which is the overused "AI video" move) */
+.wordmark-mask {
+  overflow: hidden;
+  padding-bottom: 0.1em;
+  margin-bottom: -0.1em;
+}
 .wordmark {
   font-family: var(--serif);
   font-size: 176px;

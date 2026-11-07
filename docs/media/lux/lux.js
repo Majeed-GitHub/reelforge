@@ -74,7 +74,7 @@
 
     for (const act of acts) {
       const visible = T >= act.in - 0.01 && T <= act.out + 0.4;
-      act.el.style.opacity = visible ? String(fadeWindow(T, act.in, act.in + 0.55, act.out - 0.35, act.out)) : '0';
+      act.el.style.opacity = visible ? String(fadeWindow(T, act.in, act.in + 0.55, act.out - 0.22, act.out)) : '0';
       act.el.style.transform = `translate3d(0, ${(1 - span(T, act.in, act.in + 0.8)) * 26}px, 0)`;
     }
 
@@ -83,13 +83,10 @@
     const tagline = document.querySelector('.tagline');
     const rule1 = document.querySelector('.act-mark .rule');
     if (wordmark) {
-      const k = span(T, 0.35, 2.1, easeOutExpo);
-      wordmark.style.letterSpacing = `${lerp(0.5, 0.16, k).toFixed(3)}em`;
-      wordmark.style.textIndent = `${lerp(0.5, 0.16, k).toFixed(3)}em`;
-      wordmark.style.opacity = String(span(T, 0.3, 1.1));
-      wordmark.style.transform =
-        `translate3d(0, ${lerp(70, 0, span(T, 0.35, 1.9))}px, ${lerp(-260, 0, span(T, 0.35, 2.2))}px) ` +
-        `rotateX(${lerp(16, 0, span(T, 0.35, 2.2, easeOutExpo))}deg)`;
+      // Mask reveal: slide up out of the clip. One move, 0.85s, ease-out-expo.
+      const rise = span(T, 0.42, 1.28, easeOutExpo);
+      wordmark.style.opacity = '1';
+      wordmark.style.transform = `translate3d(0, ${lerp(104, 0, rise)}%, 0)`;
     }
     if (tagline) {
       tagline.style.opacity = String(span(T, 1.45, 2.35));
@@ -114,7 +111,7 @@
     /* ---- act 3: pipeline in 3D ---- */
     if (browser) {
       const k = span(T, 8.35, 9.6, easeOutExpo);
-      const push = span(T, 9.4, 14.5, easeInOutCubic);
+      const push = span(T, 9.4, 13.2, easeInOutCubic);
       browser.style.opacity = String(span(T, 8.3, 8.9));
       browser.style.transform =
         `translateZ(${lerp(-420, 0, k)}px) rotateY(${lerp(26, 0, k)}deg) rotateX(${lerp(12, -2, k)}deg) ` +
@@ -167,7 +164,7 @@
     if (provFoot) provFoot.style.opacity = String(span(T, 17.2, 18.0));
     lanes.forEach((lane, i) => {
       const speed = Number(lane.dataset.speed || 1);
-      const offset = -((T - 14.6) * speed * 90) % 2400;
+      const offset = -((T - 14.6) * speed * 64) % 2400;
       const depth = Number(lane.dataset.depth || 1);
       lane.style.transform = `translate3d(${offset}px, 0, 0) scale(${1 + depth * 0.02})`;
       lane.style.filter = depth === 1 ? 'blur(1.6px)' : depth === 3 ? 'blur(2.4px)' : 'none';
@@ -264,7 +261,7 @@
         vec3 col = ink;
         col += ember * bloom * 0.55;
         col += steel * cool;
-        col += vec3(0.045, 0.043, 0.05) * folds * (0.5 + 0.5 * u_act);
+        col += vec3(0.030, 0.029, 0.034) * folds * (0.45 + 0.55 * u_act);
 
         // gentle vertical falloff
         col *= 0.72 + 0.5 * smoothstep(0.0, 1.1, 1.0 - abs(uv.y - 0.5) * 1.4);
