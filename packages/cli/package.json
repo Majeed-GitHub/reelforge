@@ -1,0 +1,10 @@
+{
+  "name": "@reelforge/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Reelforge CLI — capture a browser session for an environment, or wire Reelforge's MCP server into your coding agent.",
+  "bin": {
+    "reelforge": "src/index.ts"
+  }
+}

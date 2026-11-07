@@ -1,0 +1,11 @@
+{
+  "name": "@reelforge/agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Reelforge browser agent: drives a real Chromium page, records video, returns a CaptureResult.",
+  "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

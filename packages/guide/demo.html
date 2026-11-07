@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Reelforge guide widget — manual test harness</title>
+    <style>
+      :root {
+        --bg: #0b0d10;
+        --panel: #14171c;
+        --line: #232830;
+        --text: #e8eaed;
+        --muted: #9aa3b2;
+        --accent: #ff5c38;
+        --good: #39c07a;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 14px 28px;
+        border-bottom: 1px solid var(--line);
+        background: #0f1216;
+      }
+      .logo {
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        font-size: 16px;
+      }
+      .logo span {
+        color: var(--accent);
+      }
+      nav {
+        display: flex;
+        gap: 6px;
+        margin-left: 10px;
+      }
+      nav a {
+        color: var(--muted);
+        text-decoration: none;
+        padding: 6px 10px;
+        border-radius: 8px;
+        font-size: 14px;
+      }
+      nav a:hover {
+        background: #1b2027;
+        color: var(--text);
+      }
+      main {
+        max-width: 900px;
+        margin: 32px auto;
+        padding: 0 24px 80px;
+      }
+      h1 {
+        font-size: 25px;
+        letter-spacing: -0.02em;
+        margin: 0 0 6px;
+      }
+      h2 {
+        font-size: 17px;
+        margin: 28px 0 10px;
+      }
+      p.sub {
+        color: var(--muted);
+        margin: 0 0 22px;
+      }
+      code {
+        font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+        font-size: 12.5px;
+        background: #1b2027;
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        padding: 1px 5px;
+      }
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 18px;
+        margin-bottom: 12px;
+      }
+      .harness {
+        border-color: #3a2a24;
+        background: #171213;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 12px;
+      }
+      .btn {
+        display: inline-block;
+        background: var(--accent);
+        color: #110603;
+        border: 0;
+        border-radius: 9px;
+        padding: 9px 15px;
+        font-size: 14px;
+        font-weight: 650;
+        cursor: pointer;
+        text-decoration: none;
+        font-family: inherit;
+      }
+      .btn.secondary {
+        background: #1e242c;
+        color: var(--text);
+        border: 1px solid var(--line);
+        font-weight: 550;
+      }
+      input {
+        width: 100%;
+        background: #0e1116;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        color: var(--text);
+        padding: 10px 12px;
+        font-size: 14px;
+        margin: 6px 0 14px;
+        font-family: inherit;
+      }
+      label {
+        font-size: 13px;
+        color: var(--muted);
+        font-weight: 600;
+      }
+      .badge {
+        display: inline-block;
+        padding: 2px 9px;
+        border-radius: 999px;
+        background: #1e242c;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .badge.good {
+        background: rgba(57, 192, 122, 0.14);
+        color: var(--good);
+      }
+      .muted {
+        color: var(--muted);
+      }
+      pre {
+        white-space: pre-wrap;
+        background: #0a0c0f;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        padding: 12px;
+        font-size: 12.5px;
+        color: #cdd6e0;
+        margin: 0;
+      }
+      ul {
+        margin: 8px 0 0;
+        padding-left: 18px;
+        color: var(--muted);
+        font-size: 13.5px;
+      }
+      li + li {
+        margin-top: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="logo">north<span>wind</span></div>
+      <nav>
+        <a href="#projects" id="nav-projects">Projects</a>
+        <a href="#team" id="nav-team">Team</a>
+        <a href="#billing" id="nav-billing">Billing</a>
+      </nav>
+      <div style="margin-left: auto">
+        <a class="btn secondary" href="#signin" data-testid="logout">Sign out</a>
+      </div>
+    </header>
+
+    <main>
+      <section class="card harness">
+        <div class="row">
+          <div>
+            <strong>Guide widget harness</strong>
+            <div class="muted" style="font-size: 13.5px">
+              Loads <code>/g/guide.js</code> against a real embed key. Pass it with <code>?key=…</code>.
+            </div>
+          </div>
+          <span class="badge">packages/guide/demo.html</span>
+        </div>
+
+        <label for="guide-key">Guide embed key</label>
+        <input id="guide-key" placeholder="g_… or the embed_key from GET /api/guides" autocomplete="off" spellcheck="false" />
+
+        <div class="controls" style="margin-top: 0">
+          <button class="btn" id="load" type="button">Load guide</button>
+          <button class="btn secondary" id="check" type="button">Check guide against this page</button>
+          <button class="btn secondary" id="reset" type="button">Reset “don't show again”</button>
+        </div>
+
+        <pre id="check-out" hidden style="margin-top: 14px"></pre>
+        <p id="bundle-note" class="muted" hidden style="margin: 14px 0 0; font-size: 13px">
+          Could not load <code>/g/guide.js</code>. Build it first: <code>node packages/guide/build.mjs</code>.
+        </p>
+      </section>
+
+      <h1>Manual test</h1>
+      <p class="sub">
+        The page below mirrors the demo site's <code>data-testid</code> names, so a guide recorded against Northwind resolves its
+        targets here. Open this file through the API (<code>http://127.0.0.1:4400/g/demo.html?key=…</code>) — the widget fetches the
+        guide and posts skip reports from the script's own origin.
+      </p>
+
+      <section class="card" id="signin">
+        <h2 style="margin-top: 0">Sign in</h2>
+        <label for="email">Email</label>
+        <input id="email" type="email" value="ada@example.com" data-testid="email" />
+        <label for="password">Password</label>
+        <input id="password" type="password" value="northwind" data-testid="password" />
+        <button class="btn" type="button" data-testid="login-submit">Sign in</button>
+        <a class="btn secondary" href="#signin" data-testid="signin-link">Sign in</a>
+      </section>
+
+      <section class="card" id="projects">
+        <div class="row">
+          <h2 style="margin: 0">Projects</h2>
+          <a class="btn" href="#projects" data-testid="new-project">New project</a>
+        </div>
+        <div class="row" style="margin-top: 14px">
+          <div>
+            <strong>Acme Launch</strong>
+            <div class="muted">Owner Ada · created 2026-10-02</div>
+          </div>
+          <span class="badge good">Active</span>
+        </div>
+        <label for="project-name" style="display: block; margin-top: 18px">New project name</label>
+        <input id="project-name" placeholder="Q4 Launch" data-testid="project-name" />
+        <button class="btn" type="button" data-testid="create-project">Create project</button>
+      </section>
+
+      <section class="card" id="team">
+        <h2 style="margin-top: 0">Team</h2>
+        <label for="invite-email">Invite a teammate</label>
+        <input id="invite-email" type="email" placeholder="sam@example.com" data-testid="invite-email" />
+        <button class="btn" type="button" data-testid="invite-submit">Send invite</button>
+      </section>
+
+      <section class="card" id="billing">
+        <h2 style="margin-top: 0">Billing</h2>
+        <p class="muted" style="margin: 0 0 12px">
+          You're on the <strong data-testid="current-plan">Free</strong> plan.
+        </p>
+        <button class="btn" type="button" data-testid="upgrade-team">Upgrade to Team</button>
+      </section>
+
+      <section class="card">
+        <h2 style="margin-top: 0">How to get an embed key</h2>
+        <ul>
+          <li>Run the API and seed a workspace: <code>npm run seed</code>.</li>
+          <li>
+            Record one demo against <code>http://127.0.0.1:4402</code>; completing it drafts a guide.
+          </li>
+          <li>
+            List guides: <code>curl http://127.0.0.1:4400/api/guides -H "X-API-Key: rg_…"</code> — copy
+            <code>embed_key</code>.
+          </li>
+          <li>Publish it on the dashboard's Guides screen (or <code>POST /api/guides/:id/publish</code>).</li>
+          <li>
+            Open <code>http://127.0.0.1:4400/g/demo.html?key=&lt;embed_key&gt;</code> and press <em>Load guide</em>.
+          </li>
+        </ul>
+      </section>
+    </main>
+
+    <script>
+      const keyInput = document.getElementById('guide-key');
+      const params = new URLSearchParams(location.search);
+      const initialKey = (params.get('key') || '').trim();
+      keyInput.value = initialKey;
+
+      function load() {
+        const key = keyInput.value.trim();
+        location.href = key ? '?key=' + encodeURIComponent(key) : location.pathname;
+      }
+
+      document.getElementById('load').addEventListener('click', load);
+      keyInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') load();
+      });
+
+      document.getElementById('reset').addEventListener('click', () => {
+        try {
+          Object.keys(localStorage)
+            .filter((name) => name.indexOf('reelforge.guide.') === 0)
+            .forEach((name) => localStorage.removeItem(name));
+        } catch (error) {
+          /* storage blocked */
+        }
+        location.reload();
+      });
+
+      /** Same fallback order the widget uses, enough to eyeball a guide by hand. */
+      function resolveOnPage(step) {
+        try {
+          const match = /\[data-testid\s*=\s*["']?([^"'\]]+)["']?\s*\]/.exec(step.selector || '');
+          if (match) {
+            const byTestId = document.querySelector('[data-testid="' + match[1] + '"]');
+            if (byTestId) return byTestId;
+          }
+          if (step.selector) {
+            const direct = document.querySelector(step.selector);
+            if (direct) return direct;
+          }
+        } catch (error) {
+          /* invalid selector */
+        }
+        return null;
+      }
+
+      document.getElementById('check').addEventListener('click', async () => {
+        const out = document.getElementById('check-out');
+        out.hidden = false;
+        out.textContent = 'Reading the guide…';
+        const key = keyInput.value.trim();
+        if (!key) {
+          out.textContent = 'Enter an embed key first.';
+          return;
+        }
+        try {
+          const response = await fetch('/api/guides/embed/' + encodeURIComponent(key));
+          if (!response.ok) throw new Error('HTTP ' + response.status);
+          const payload = await response.json();
+          const guide = payload.data || payload;
+          const steps = Array.isArray(guide.steps) ? guide.steps : [];
+          const lines = steps.map((step, index) => {
+            const target = resolveOnPage(step);
+            return (
+              index +
+              1 +
+              '. ' +
+              (step.title || '(untitled)') +
+              (target ? ' — resolves on this page' : ' — NOT on this page (widget skips and reports)') +
+              (step.selector ? '\n   ' + step.selector : '')
+            );
+          });
+          out.textContent =
+            (guide.name ? guide.name + ' · ' : '') +
+            guide.id +
+            ' · ' +
+            steps.length +
+            ' step(s)\n\n' +
+            (lines.join('\n') || 'This guide has no steps.');
+        } catch (error) {
+          out.textContent =
+            'Could not read the guide: ' +
+            (error && error.message ? error.message : String(error)) +
+            '\n\nServe this page from the API (http://127.0.0.1:4400/g/demo.html) with a real embed key.';
+        }
+      });
+
+      if (initialKey) {
+        const script = document.createElement('script');
+        script.src = './guide.js';
+        script.async = true;
+        script.setAttribute('data-guide', initialKey);
+        script.addEventListener('error', () => {
+          document.getElementById('bundle-note').hidden = false;
+        });
+        document.body.appendChild(script);
+      }
+    </script>
+  </body>
+</html>

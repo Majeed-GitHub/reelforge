@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.base.json",
+  "include": ["packages/*/src/**/*.ts", "packages/*/src/**/*.tsx", "apps/*/**/*.ts", "scripts/**/*.ts"],
+  "exclude": ["node_modules", "data", "packages/web/src/**/*.tsx", "packages/web/vite.config.ts"]
+}
