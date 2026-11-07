@@ -24,10 +24,10 @@ Running it on a Mac or a Windows machine rather than a Linux server? Read
 [§11](#11-platforms-what-is-verified-where) first: it says exactly which halves of
 the pipeline CI proves on which OS, and what you need installed for narration.
 
-> Placeholder reminder: `YOUR_GITHUB_USER` in clone URLs and `your-github-user`
+> Placeholder reminder: `Majeed-GitHub` in clone URLs and `majeed-github`
 > in image names are replaced when the project is published. Docker image
 > references **must be lowercase**, which is why the compose file uses
-> `ghcr.io/your-github-user/…` — `YOUR_GITHUB_USER` there is rejected by the
+> `ghcr.io/majeed-github/…` — `Majeed-GitHub` there is rejected by the
 > Docker daemon (`invalid reference format`). Building from source works
 > identically without either replacement.
 
@@ -47,7 +47,7 @@ fonts, ffmpeg or system libraries yourself.
 > clear message if they drift, so a broken image never reaches `docker run`.
 
 ```bash
-# build it (or: docker pull ghcr.io/your-github-user/reelforge:latest)
+# build it (or: docker pull ghcr.io/majeed-github/reelforge:latest)
 docker build -t reelforge:dev .
 
 # create the data volume and seed the workspace + API key
@@ -111,7 +111,7 @@ docker compose logs reelforge | grep rg_      # the API key
 # open http://127.0.0.1:4400/app/
 ```
 
-- Published image? Change `image:` to `ghcr.io/your-github-user/reelforge:latest`
+- Published image? Change `image:` to `ghcr.io/majeed-github/reelforge:latest`
   (it is already the default) and remove the `build:` block, or keep both so
   `docker compose up --build` always uses local source.
 - The compose file runs `node scripts/seed.ts && node packages/api/src/server.ts`
@@ -150,7 +150,7 @@ Playwright. `ffmpeg` and `ffprobe` are bundled by `ffmpeg-static` /
 to (`REELFORGE_FFMPEG_PATH` overrides the bundled binary).
 
 ```bash
-git clone https://github.com/YOUR_GITHUB_USER/reelforge.git
+git clone https://github.com/Majeed-GitHub/reelforge.git
 cd reelforge
 npm ci
 npx playwright install --with-deps chromium     # --with-deps needs sudo on Linux
@@ -351,7 +351,7 @@ the base image. Options:
 -e REELFORGE_TTS_PROVIDER=elevenlabs -e ELEVENLABS_API_KEY=...
 
 # Local neural TTS: derive an image with edge-tts installed
-#   FROM ghcr.io/your-github-user/reelforge:latest
+#   FROM ghcr.io/majeed-github/reelforge:latest
 #   USER root
 #   RUN apt-get update && apt-get install -y --no-install-recommends python3-pip \
 #    && pip install --break-system-packages edge-tts && apt-get clean

@@ -4,7 +4,7 @@
 
 Shaik Majeed · 2026 · MIT licensed
 Developed with the **DeepSeek Harness**, using the **GMI Cloud API**.
-Source: `github.com/YOUR_GITHUB_USER/reelforge`
+Source: `github.com/Majeed-GitHub/reelforge`
 
 ---
 

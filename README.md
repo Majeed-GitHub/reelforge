@@ -6,7 +6,7 @@ An open-source, self-hosted alternative to commercial demo agents ([Screenforge 
 
 **Free forever:** MIT licence, no paid tier, no export caps, no seat limits, no telemetry, and the watermark is a render option you control rather than a licence gate.
 
-[![CI](https://github.com/YOUR_GITHUB_USER/reelforge/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR_GITHUB_USER/reelforge/actions/workflows/ci.yml)
+[![CI](https://github.com/Majeed-GitHub/reelforge/actions/workflows/ci.yml/badge.svg)](https://github.com/Majeed-GitHub/reelforge/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-FF5C38.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%E2%89%A522.6-3ddc97.svg)](package.json)
 [![Docker](https://img.shields.io/badge/docker-ghcr.io-79a7ff.svg)](docs/DEPLOY.md)
@@ -19,7 +19,7 @@ An open-source, self-hosted alternative to commercial demo agents ([Screenforge 
 ## Try it in 60 seconds
 
 ```bash
-git clone https://github.com/YOUR_GITHUB_USER/reelforge.git && cd reelforge
+git clone https://github.com/Majeed-GitHub/reelforge.git && cd reelforge
 npm install
 npx playwright install chromium     # once, ~130 MB
 npm run seed                        # creates a workspace, prints an rg_… key
@@ -39,7 +39,7 @@ product, narrate, and publish.
 Or with Docker:
 
 ```bash
-docker run --rm -p 4400:4400 -v reelforge-data:/data ghcr.io/YOUR_GITHUB_USER/reelforge:latest
+docker run --rm -p 4400:4400 -v reelforge-data:/data ghcr.io/Majeed-GitHub/reelforge:latest
 ```
 
 No model key is required for either — see [Run fully local](#run-fully-local).

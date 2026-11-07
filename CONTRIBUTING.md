@@ -17,7 +17,7 @@ API keys. TypeScript is executed directly by Node's type stripping — there is 
 build step for the server, the agent, the renderer or the CLI.
 
 ```bash
-git clone https://github.com/YOUR_GITHUB_USER/reelforge.git
+git clone https://github.com/Majeed-GitHub/reelforge.git
 cd reelforge
 npm install                       # root workspaces
 npx playwright install chromium   # once, ~150 MB
@@ -136,7 +136,7 @@ Breaking changes: add `!` after the type/scope and a `BREAKING CHANGE:` footer.
 - `main` is protected by CI: typecheck, dashboard build, guide build, render
   self-test and the full smoke test on Node 22 and 24.
 - Releases are cut by pushing a `v*` tag; `.github/workflows/release.yml` builds
-  and pushes `ghcr.io/YOUR_GITHUB_USER/reelforge` and the CHANGELOG is updated in
+  and pushes `ghcr.io/Majeed-GitHub/reelforge` and the CHANGELOG is updated in
   the same PR that bumps `package.json` version.
 
 ## Licence

@@ -417,8 +417,8 @@ export function AboutCard({ version }: { version?: string }) {
       </div>
       <p className="hint">
         Built with the DeepSeek Harness, using the GMI Cloud API. Source and issues:{' '}
-        <a className="btn-link" href="https://github.com/YOUR_GITHUB_USER/reelforge" target="_blank" rel="noreferrer">
-          github.com/YOUR_GITHUB_USER/reelforge
+        <a className="btn-link" href="https://github.com/Majeed-GitHub/reelforge" target="_blank" rel="noreferrer">
+          github.com/Majeed-GitHub/reelforge
         </a>
       </p>
       <CodeBlock
