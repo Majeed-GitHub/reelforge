@@ -128,6 +128,44 @@ console.log(`  authenticated${login ? ` as ${login}` : ''}`);
 const owner = String(OWNER || login || '');
 if (!owner) fail('Could not determine the GitHub owner. Pass --owner YOUR_GITHUB_USER.');
 
+// --- 1b. placeholders -------------------------------------------------------
+step('Pointing repository links at ' + full);
+const PLACEHOLDER = 'YOUR_GITHUB_USER';
+const touched = [];
+function rewrite(file) {
+  if (!fs.existsSync(file)) return;
+  const before = fs.readFileSync(file, 'utf8');
+  if (!before.includes(PLACEHOLDER)) return;
+  fs.writeFileSync(file, before.split(PLACEHOLDER).join(owner));
+  touched.push(file);
+}
+for (const file of ['README.md', 'CONTRIBUTING.md', 'SECURITY.md', 'CHANGELOG.md']) rewrite(file);
+for (const dir of ['docs', 'packages/web/src']) {
+  if (!fs.existsSync(dir)) continue;
+  for (const entry of fs.readdirSync(dir, { recursive: true, withFileTypes: true })) {
+    if (!entry.isFile()) continue;
+    if (!/\.(md|tsx?|html)$/.test(entry.name)) continue;
+    rewrite(path.join(entry.parentPath ?? entry.path, entry.name));
+  }
+}
+if (touched.length > 0) {
+  console.log('  rewrote ' + touched.length + ' file(s)');
+  if (!DRY) {
+    // The dashboard bundle is gitignored but is what a local API serves, so
+    // rebuild it rather than leaving a stale link in the running app.
+    try {
+      execFileSync(process.execPath, [path.join('node_modules', 'vite', 'bin', 'vite.js'), 'build', '--config', 'packages/web/vite.config.ts'], { cwd: ROOT, stdio: 'ignore' });
+      console.log('  rebuilt packages/web/dist');
+    } catch {
+      console.log('  (dashboard rebuild skipped)');
+    }
+    sh('git', ['add', '-A']);
+    sh('git', ['commit', '-m', 'docs: point repository links at ' + full]);
+  }
+} else {
+  console.log('  nothing to rewrite');
+}
+
 // --- 2. repo -----------------------------------------------------------------
 const full = `${owner}/${REPO}`;
 step(`Ensuring ${full} exists`);
