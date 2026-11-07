@@ -1,12 +1,22 @@
-import type { FastifyInstance } from 'fastify';
+﻿import type { FastifyInstance } from 'fastify';
 
-export const VERSION = '0.1.0';
+export const VERSION = '0.2.0';
 export const SERVICE = 'reelforge';
 /** The CLI feature-gates itself on this list (Director parity). */
-export const FEATURES = ['environments', 'login-codes', 'graph', 'guides', 'mcp'] as const;
+export const FEATURES = [
+  'environments',
+  'login-codes',
+  'graph',
+  'guides',
+  'mcp',
+  'providers',
+  'webhooks',
+  'exports',
+  'share'
+] as const;
 
 /**
- * Director's `/health` is a bare object — the CLI reads `features` at the top
+ * Director's `/health` is a bare object â€” the CLI reads `features` at the top
  * level to feature-gate itself. Dashboards in this repo read `data.*`. The
  * response carries both so neither client has to special-case it.
  */

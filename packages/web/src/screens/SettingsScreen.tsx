@@ -5,6 +5,8 @@ import { formatDateTime, formatRelative } from '../format.ts';
 import { confirmAction, useCopy, useLoader } from '../hooks.ts';
 import { Banner, CodeBlock, CopyButton, EmptyState, ErrorPanel, Field, KeyValue, Pill, SkeletonRows } from '../components/ui.tsx';
 import { Icon } from '../components/icons.tsx';
+import { AboutCard, ProviderSettingsCard } from './ProviderSettings.tsx';
+import { WebhookSettingsCard } from './WebhookSettings.tsx';
 
 export function SettingsScreen({ apiKey, onKeyChange }: { apiKey: string; onKeyChange: (key: string) => void }) {
   const origin = apiOrigin();
@@ -23,10 +25,13 @@ export function SettingsScreen({ apiKey, onKeyChange }: { apiKey: string; onKeyC
       </div>
 
       <div className="stack-lg">
+        <ProviderSettingsCard />
+        <WebhookSettingsCard />
         <BrowserKeyCard apiKey={apiKey} onKeyChange={onKeyChange} />
         <ApiKeysCard onUseKey={onKeyChange} />
         <SnippetsCard origin={origin} apiKey={apiKey} />
         <DeploymentCard health={health.data} loading={health.loading} error={health.error} origin={origin} />
+        <AboutCard version={health.data?.version} />
       </div>
     </div>
   );

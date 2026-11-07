@@ -181,3 +181,68 @@ SSO/MFA work without ever holding your password.
 minimum for any demo that produces video. A 45-second demo is `0.75` credits. Articles,
 environments, lookups and re-checks are free. Enforcement is off by default when self-hosting
 (`REELFORGE_ENFORCE_CREDITS=true` turns it on).
+---
+
+# v0.2 additions
+
+Four new surface areas. All use the same envelope and error codes above.
+
+## Bring your own key (`/api/providers`)
+
+| Method & path | Purpose |
+|---|---|
+| `GET /api/providers` | Catalog + live state: which LLM and TTS provider is active, where it came from (`env` / `workspace` / `none`), a masked key hint, the model. Never returns a key. |
+| `POST /api/providers` | Set the provider for this workspace. Body `{ llm?: { providerId, apiKey?, model?, baseUrl? }, tts?: { providerId, voice? } }`. Sending `providerId: "none"` clears the override; omitting `apiKey` keeps the stored one; `apiKey: ""` clears just the key. |
+| `DELETE /api/providers` | Clear the workspace override (env still wins). |
+| `GET /api/providers/models?provider=gmi` | Live model discovery from the provider's `/models`. Always 200; `source: "live" \| "default"`. |
+| `POST /api/providers/test` | One real round trip. `{ ok, latencyMs, model, error }` — a provider-side failure is 200 with `ok:false`, never a 500. |
+
+Keys posted here are sealed with AES-256-GCM before they reach SQLite, scoped to the
+workspace, and only ever returned as a hint like `sk-…4f2a`.
+
+```bash
+curl -X POST http://127.0.0.1:4400/api/providers \
+  -H "X-API-Key: $REELFORGE_API_KEY" -H 'content-type: application/json' \
+  -d '{"llm":{"providerId":"gmi","apiKey":"...","model":"vendor/model"}}'
+```
+
+## Outputs: exports, share pages, webhooks
+
+| Method & path | Purpose |
+|---|---|
+| `POST /api/demos/:id/exports` | `{ kind: "gif" \| "vtt" }` → `{ id, kind, status }`. Async; unsupported kind is a 501 envelope, not a 500. |
+| `GET /api/demos/:id/exports` | `{ exports: [{ id, kind, status, url, bytes }] }`, `url` is a signed `/api/files/…` path. |
+| `GET /api/demos/:id/share` | `{ url, expiresAt }` — a 30-day public link. |
+| `GET /api/share/:token` | **No auth.** Self-contained HTML page: poster, signed `<video>`, instruction as title, duration, goal-met summary, article link. Expired token renders a 404 page, not JSON. |
+| `GET /api/webhooks` | `{ url, hasSecret, lastDelivery }` |
+| `POST /api/webhooks` | `{ url, secret? }`. Omitted secret keeps the stored one; `null` clears it. |
+| `DELETE /api/webhooks` | Remove the endpoint. |
+| `POST /api/webhooks/test` | `{ delivered, status, latencyMs }` — sends a synthetic event now. |
+
+Webhook deliveries carry `X-Reelforge-Event` and, when a secret is set,
+`X-Reelforge-Signature: sha256=<HMAC-SHA256 of the raw body>`:
+
+```json
+{
+  "event": "demo.complete",
+  "timestamp": "2026-11-07T07:12:44.101Z",
+  "demo": { "id": "dem_…", "status": "complete", "durationMs": 32549, "creditsUsed": 0.542,
+            "videoUrl": "…", "posterUrl": "…", "outcome": { "goalMet": true, "stepsCompleted": 11 } },
+  "flow": { "id": "flw_…", "name": "Sign in then create project", "steps": 11 },
+  "article": { "id": "art_…" },
+  "guide": { "embedKey": "…" }
+}
+```
+
+An endpoint on `hooks.slack.com` receives `{ text, blocks }` instead, so a Slack
+incoming webhook works by pasting the URL. Delivery has a 5 s timeout and one retry;
+failures never affect the demo. See [OUTPUTS.md](OUTPUTS.md).
+
+## MCP transports
+
+| Transport | Where | Client |
+|---|---|---|
+| Streamable HTTP | `POST /api/mcp` | Claude Code, Cursor, anything that speaks remote MCP |
+| stdio bridge | `node packages/cli/src/mcp-stdio.ts --stdio` | Claude Desktop and other stdio-only clients |
+
+Both expose the same tools, resources and prompts.

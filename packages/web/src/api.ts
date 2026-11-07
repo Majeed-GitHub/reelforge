@@ -506,3 +506,150 @@ export function apiOrigin(): string {
 export function plaintextKey(key: CreatedApiKey): string {
   return key.key ?? key.plaintext ?? key.apiKey ?? '';
 }
+
+// ---------------------------------------------------------------------------
+// v0.2 — bring-your-own-key providers, exports, sharing, webhooks
+// ---------------------------------------------------------------------------
+
+export type ProviderSource = 'env' | 'workspace' | 'none';
+
+export type LlmProviderState = {
+  id: string;
+  label: string;
+  baseUrl: string;
+  requiresKey: boolean;
+  defaultModel?: string;
+  helpUrl?: string;
+  note?: string;
+  configured: boolean;
+  source: ProviderSource;
+  /** Masked only, e.g. "sk-…4f2a". Never the real key. */
+  keyHint: string | null;
+  model: string | null;
+};
+
+export type TtsProviderState = {
+  id: string;
+  label: string;
+  requiresKey: boolean;
+  offline?: boolean;
+  configured: boolean;
+  note?: string;
+};
+
+export type ProvidersState = {
+  llm: {
+    active: { providerId: string; model: string | null; baseUrl: string | null; source: ProviderSource };
+    providers: LlmProviderState[];
+  };
+  tts: {
+    active: { providerId: string; voice: string | null; source: ProviderSource };
+    providers: TtsProviderState[];
+  };
+};
+
+export type ProviderTestResult = {
+  ok: boolean;
+  latencyMs?: number;
+  model?: string;
+  error?: string | null;
+};
+
+export type ExportKind = 'gif' | 'vtt';
+export type DemoExport = {
+  id: string;
+  kind: ExportKind | string;
+  status: 'queued' | 'complete' | 'failed' | string;
+  url?: string | null;
+  bytes?: number | null;
+};
+
+export type WebhookState = {
+  url: string | null;
+  hasSecret: boolean;
+  lastDelivery?: { at?: string; ok?: boolean; status?: number } | null;
+};
+
+export type WebhookTestResult = { delivered: boolean; status?: number; latencyMs?: number };
+
+export const apiV2 = {
+  providers: {
+    async get(): Promise<ProvidersState> {
+      return (await request<ProvidersState>('/providers')) ?? ({ llm: { active: { providerId: 'none', model: null, baseUrl: null, source: 'none' }, providers: [] }, tts: { active: { providerId: 'none', voice: null, source: 'none' }, providers: [] } } as ProvidersState);
+    },
+
+    async save(body: {
+      llm?: { providerId: string; apiKey?: string; model?: string; baseUrl?: string };
+      tts?: { providerId: string; voice?: string };
+    }): Promise<ProvidersState> {
+      return (await request<ProvidersState>('/providers', { method: 'POST', body })) ?? (await apiV2.providers.get());
+    },
+
+    async clear(): Promise<ProvidersState> {
+      return (await request<ProvidersState>('/providers', { method: 'DELETE' })) ?? (await apiV2.providers.get());
+    },
+
+    async models(providerId: string, baseUrl?: string): Promise<string[]> {
+      const query = new URLSearchParams({ provider: providerId });
+      if (baseUrl) query.set('baseUrl', baseUrl);
+      const data = asRecord(await request<unknown>(`/providers/models?${query.toString()}`));
+      const list = Array.isArray(data.models) ? data.models : asList<unknown>(data);
+      return list.map((m) => (typeof m === 'string' ? m : String(asRecord(m).id ?? ''))).filter(Boolean);
+    },
+
+    async test(body: { providerId: string; apiKey?: string; baseUrl?: string; model?: string }): Promise<ProviderTestResult> {
+      const data = asRecord(await request<unknown>('/providers/test', { method: 'POST', body }));
+      return {
+        ok: Boolean(data.ok),
+        latencyMs: typeof data.latencyMs === 'number' ? data.latencyMs : undefined,
+        model: typeof data.model === 'string' ? data.model : undefined,
+        error: typeof data.error === 'string' ? data.error : null
+      };
+    }
+  },
+
+  exports: {
+    async list(demoId: string): Promise<DemoExport[]> {
+      const data = asRecord(await request<unknown>(`/demos/${encodeURIComponent(demoId)}/exports`));
+      if (Array.isArray(data.exports)) return data.exports as DemoExport[];
+      return asList<DemoExport>(data);
+    },
+
+    async request(demoId: string, kind: ExportKind): Promise<DemoExport> {
+      const data = asRecord(await request<unknown>(`/demos/${encodeURIComponent(demoId)}/exports`, { method: 'POST', body: { kind } }));
+      return { id: String(data.id ?? ''), kind, status: String(data.status ?? 'queued') };
+    }
+  },
+
+  share: {
+    async link(demoId: string): Promise<{ url: string; expiresAt?: string | null }> {
+      const data = asRecord(await request<unknown>(`/demos/${encodeURIComponent(demoId)}/share`));
+      return { url: String(data.url ?? ''), expiresAt: typeof data.expiresAt === 'string' ? data.expiresAt : null };
+    }
+  },
+
+  webhooks: {
+    async get(): Promise<WebhookState> {
+      const data = asRecord(await request<unknown>('/webhooks'));
+      return {
+        url: typeof data.url === 'string' ? data.url : null,
+        hasSecret: Boolean(data.hasSecret),
+        lastDelivery: (data.lastDelivery as WebhookState['lastDelivery']) ?? null
+      };
+    },
+
+    async save(body: { url: string; secret?: string | null }): Promise<WebhookState> {
+      await request<unknown>('/webhooks', { method: 'POST', body });
+      return apiV2.webhooks.get();
+    },
+
+    async test(): Promise<WebhookTestResult> {
+      const data = asRecord(await request<unknown>('/webhooks/test', { method: 'POST', body: {} }));
+      return {
+        delivered: Boolean(data.delivered),
+        status: typeof data.status === 'number' ? data.status : undefined,
+        latencyMs: typeof data.latencyMs === 'number' ? data.latencyMs : undefined
+      };
+    }
+  }
+};

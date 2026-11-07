@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import type { DemoFailure, DemoOutcome, DemoQuestion, NarrationLine } from '@core';
-import { api, isNetworkError } from '../api.ts';
+import { api, apiV2, isApiError, isNetworkError } from '../api.ts';
 import type { CreateDemoBody } from '../api.ts';
 import {
   formatDateTime,
@@ -14,7 +14,7 @@ import {
   prettyJson,
   toPercent
 } from '../format.ts';
-import { confirmAction, useLoader, usePolling } from '../hooks.ts';
+import { confirmAction, useCopy, useLoader, usePolling } from '../hooks.ts';
 import { href, navigate } from '../router.ts';
 import {
   Banner,
@@ -167,10 +167,11 @@ export function DemoDetailScreen({ id }: { id: string }) {
             {data.instruction}
           </h1>
           <p className="page-sub mono" style={{ fontSize: 12 }}>
-            {data.id} · {data.target_type} target
+            {data.id} Â· {data.target_type} target
           </p>
         </div>
         <div className="row" style={{ flexShrink: 0 }}>
+          <OutputActions demoId={data.id} status={data.status} />
           {running ? (
             <button type="button" className="btn btn-danger" onClick={cancel} disabled={busy !== null}>
               {busy === 'cancel' ? <Icon name="refresh" size={14} className="spin" /> : <Icon name="close" size={14} />}
@@ -241,7 +242,7 @@ export function DemoDetailScreen({ id }: { id: string }) {
               <div className="card-body stack">
                 <Banner tone="info" title="The run is complete but no video URL was returned">
                   <p>
-                    The API signs video URLs on read. If this stays empty, the render output or the signing secret is missing — check{' '}
+                    The API signs video URLs on read. If this stays empty, the render output or the signing secret is missing â€” check{' '}
                     <code>GET /api/demos/{data.id}</code> in the Raw tab.
                   </p>
                   <div className="banner-actions">
@@ -353,7 +354,7 @@ export function DemoDetailScreen({ id }: { id: string }) {
                       {outcome.stoppedBefore}
                     </p>
                     <p style={{ marginTop: 6 }}>
-                      Re-record with “Allow destructive steps” if this run should go further.
+                      Re-record with â€œAllow destructive stepsâ€ if this run should go further.
                     </p>
                   </Banner>
                 ) : null}
@@ -374,7 +375,7 @@ export function DemoDetailScreen({ id }: { id: string }) {
                     body={
                       running
                         ? 'Steps appear here as the browser agent performs them, with a screenshot thumbnail and the selector it used.'
-                        : 'A run with zero steps usually means the planner never reached the page — check the failure panel above.'
+                        : 'A run with zero steps usually means the planner never reached the page â€” check the failure panel above.'
                     }
                   />
                 ) : (
@@ -385,10 +386,10 @@ export function DemoDetailScreen({ id }: { id: string }) {
                           <span className="step-idx">{step.idx}</span>
                           <span className="step-kind">{step.kind}</span>
                           <div className="step-narration">
-                            <div>{step.narration || <span className="dim">—</span>}</div>
+                            <div>{step.narration || <span className="dim">â€”</span>}</div>
                             <div className="step-sel" title={step.selector ?? undefined}>
-                              {step.selector ?? step.role ?? '—'}
-                              {step.url ? ` · ${hostOf(step.url)}` : ''}
+                              {step.selector ?? step.role ?? 'â€”'}
+                              {step.url ? ` Â· ${hostOf(step.url)}` : ''}
                             </div>
                           </div>
                           {step.screenshotUrl ? (
@@ -437,7 +438,7 @@ export function DemoDetailScreen({ id }: { id: string }) {
                             <div>
                               <div>{line.text}</div>
                               <div className="hint">
-                                step {line.stepIndex} · {formatDuration(line.durationMs)} of audio
+                                step {line.stepIndex} Â· {formatDuration(line.durationMs)} of audio
                               </div>
                             </div>
                           </div>
@@ -520,6 +521,125 @@ function Stat({ label, value, hint }: { label: string; value: string; hint?: str
         {value}
       </p>
       {hint ? <p className="hint">{hint}</p> : null}
+    </div>
+  );
+}
+
+/**
+ * Share and export actions for a finished demo: a public share link, a GIF
+ * preview for chat, and WebVTT captions. Each feature degrades to a disabled
+ * button (with a reason) when the API does not offer it.
+ */
+function OutputActions({ demoId, status }: { demoId: string; status: string }) {
+  const ready = status === 'complete';
+  const { copied, copy } = useCopy();
+  const [exports, setExports] = useState<Record<string, { status: string; url?: string | null }>>({});
+  const [busy, setBusy] = useState<'share' | 'gif' | 'vtt' | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [unsupported, setUnsupported] = useState(false);
+
+  useEffect(() => {
+    if (!ready) return;
+    let cancelled = false;
+    apiV2.exports
+      .list(demoId)
+      .then((list) => {
+        if (cancelled) return;
+        const next: Record<string, { status: string; url?: string | null }> = {};
+        for (const item of list) next[String(item.kind)] = { status: item.status, url: item.url };
+        setExports(next);
+      })
+      .catch((error) => {
+        if (!cancelled && isApiError(error) && (error.status === 404 || error.status === 501)) setUnsupported(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [demoId, ready]);
+
+  async function copyShareLink() {
+    setBusy('share');
+    setNotice(null);
+    try {
+      const link = await apiV2.share.link(demoId);
+      if (!link.url) throw new Error('The API returned no share URL.');
+      copy(link.url);
+      setNotice('Share link copied.');
+    } catch (error) {
+      if (isApiError(error) && (error.status === 404 || error.status === 501)) setUnsupported(true);
+      setNotice(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function exportAs(kind: 'gif' | 'vtt') {
+    const existing = exports[kind];
+    if (existing?.url && existing.status === 'complete') {
+      window.open(existing.url, '_blank', 'noopener');
+      return;
+    }
+    setBusy(kind);
+    setNotice(null);
+    try {
+      await apiV2.exports.request(demoId, kind);
+      for (let attempt = 0; attempt < 20; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        const list = await apiV2.exports.list(demoId);
+        const match = list.find((item) => item.kind === kind);
+        if (!match) continue;
+        setExports((current) => ({ ...current, [kind]: { status: match.status, url: match.url } }));
+        if (match.status === 'complete' && match.url) {
+          window.open(match.url, '_blank', 'noopener');
+          setNotice(kind === 'gif' ? 'GIF ready.' : 'Captions ready.');
+          return;
+        }
+        if (match.status === 'failed') throw new Error(`The ${kind} export failed.`);
+      }
+      setNotice(`Still rendering the ${kind.toUpperCase()} — try again in a moment.`);
+    } catch (error) {
+      if (isApiError(error) && (error.status === 404 || error.status === 501)) setUnsupported(true);
+      setNotice(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const disabledReason = !ready ? 'Available once the demo finishes.' : unsupported ? 'Not enabled on this deployment.' : undefined;
+
+  return (
+    <div className="output-actions">
+      <button
+        type="button"
+        className="btn btn-ghost btn-sm"
+        onClick={copyShareLink}
+        disabled={!ready || unsupported || busy !== null}
+        title={disabledReason}
+      >
+        <Icon name={copied ? 'check' : 'link'} size={14} />
+        {copied ? 'Copied' : 'Share'}
+      </button>
+      <button
+        type="button"
+        className="btn btn-ghost btn-sm"
+        onClick={() => exportAs('gif')}
+        disabled={!ready || unsupported || busy !== null}
+        title={disabledReason ?? 'Animated preview for chat'}
+      >
+        <Icon name="film" size={14} />
+        {busy === 'gif' ? 'Rendering…' : 'GIF'}
+      </button>
+      <button
+        type="button"
+        className="btn btn-ghost btn-sm"
+        onClick={() => exportAs('vtt')}
+        disabled={!ready || unsupported || busy !== null}
+        title={disabledReason ?? 'WebVTT captions'}
+      >
+        <Icon name="terminal" size={14} />
+        {busy === 'vtt' ? 'Rendering…' : 'Captions'}
+      </button>
+      {notice ? <span className="hint">{notice}</span> : null}
     </div>
   );
 }

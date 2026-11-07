@@ -76,6 +76,25 @@ export function OnboardingScreen({
           </p>
         </div>
 
+        <div className="onboard-paths">
+          <div className="onboard-path">
+            <span className="eyebrow">no keys</span>
+            <strong>Run fully local</strong>
+            <p className="hint">
+              Offline scripted planner plus Windows SAPI narration. Nothing leaves this machine — good for trying the whole pipeline
+              out before spending anything.
+            </p>
+          </div>
+          <div className="onboard-path">
+            <span className="eyebrow">bring your own</span>
+            <strong>Connect a model</strong>
+            <p className="hint">
+              GMI Cloud, OpenAI, OpenRouter, Groq, Together, DeepSeek — or a local Ollama. Unlocks open-ended instructions. Set it in
+              Settings → Model provider once you are in.
+            </p>
+          </div>
+        </div>
+
         <div className="stack" style={{ gap: 14 }}>
           <div className="onboard-step">
             <span className="onboard-step-n">1</span>

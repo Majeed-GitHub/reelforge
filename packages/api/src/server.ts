@@ -1,4 +1,4 @@
-import fs from 'node:fs';
+﻿import fs from 'node:fs';
 import path from 'node:path';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
@@ -10,6 +10,8 @@ import { attachAuth } from './auth.ts';
 import { activeRuns, isWorkerRunning, startWorker, stopWorker, workerCapacity } from './queue.ts';
 import articleRoutes from './routes/articles.ts';
 import demoRoutes from './routes/demos.ts';
+import exportRoutes from './routes/exports.ts';
+import shareRoutes from './routes/share.ts';
 import domainRoutes from './routes/domains.ts';
 import environmentRoutes from './routes/environments.ts';
 import fileRoutes from './routes/files.ts';
@@ -18,7 +20,9 @@ import guideRoutes from './routes/guides.ts';
 import healthRoutes, { FEATURES, SERVICE, VERSION } from './routes/health.ts';
 import mcpRoutes from './routes/mcp.ts';
 import presetRoutes from './routes/presets.ts';
+import providerRoutes from './routes/providers.ts';
 import settingsRoutes from './routes/settings.ts';
+import { webhookRoutes } from './services/webhooks.ts';
 
 /**
  * Reelforge API server.
@@ -49,7 +53,7 @@ export async function buildServer(options: BuildOptions = {}): Promise<FastifyIn
   });
 
   // Bodyless POSTs (reverify, cancel, publish, verify) are normal, but clients
-  // still send `Content-Type: application/json` with no body — Fastify's stock
+  // still send `Content-Type: application/json` with no body â€” Fastify's stock
   // parser rejects that with FST_ERR_CTP_EMPTY_JSON_BODY. Treat an empty body
   // as `{}`; anything else is still parsed strictly.
   app.addContentTypeParser('application/json', { parseAs: 'string' }, (_request, body, done) => {
@@ -145,6 +149,10 @@ export async function buildServer(options: BuildOptions = {}): Promise<FastifyIn
   // --- REST surface ---------------------------------------------------------
   await app.register(healthRoutes);
   await app.register(demoRoutes);
+  // v0.2 outputs: GIF/VTT exports, public share pages, webhook config + delivery
+  await app.register(exportRoutes);
+  await app.register(shareRoutes);
+  await app.register(webhookRoutes);
   await app.register(environmentRoutes);
   await app.register(domainRoutes);
   await app.register(graphRoutes);
@@ -152,6 +160,8 @@ export async function buildServer(options: BuildOptions = {}): Promise<FastifyIn
   await app.register(guideRoutes);
   await app.register(presetRoutes);
   await app.register(settingsRoutes);
+  // v0.2 BYOK: provider catalog, encrypted workspace keys, model discovery, probes
+  await app.register(providerRoutes);
   await app.register(fileRoutes);
   await app.register(mcpRoutes);
 
@@ -171,7 +181,7 @@ export async function buildServer(options: BuildOptions = {}): Promise<FastifyIn
       const placeholder = async () => ({
         message: 'The dashboard has not been built yet.',
         data: {
-          hint: 'Build packages/web (vite build), then restart the API — the API itself is fully functional.',
+          hint: 'Build packages/web (vite build), then restart the API â€” the API itself is fully functional.',
           expectedDir: PATHS.webDist
         }
       });
@@ -222,17 +232,17 @@ export async function startServer(): Promise<FastifyInstance> {
 
   const workerEnabled = (process.env.REELFORGE_WORKER ?? 'on').toLowerCase() !== 'off';
   if (workerEnabled) startWorker();
-  else console.log('[api] worker disabled (REELFORGE_WORKER=off) — run packages/api/src/worker/main.ts separately');
+  else console.log('[api] worker disabled (REELFORGE_WORKER=off) â€” run packages/api/src/worker/main.ts separately');
 
   console.log(`[api] Reelforge ${VERSION} listening on http://${host}:${API_PORT} (base ${`http://${host}:${API_PORT}`}/api)`);
   console.log(`[api] data dir: ${PATHS.data}`);
-  console.log(`[api] dashboard: ${fs.existsSync(PATHS.webDist) ? '/app' : '/app (not built yet)'} · guide widget: ${fs.existsSync(GUIDE_DIST) ? '/g/demo.html' : '/g (not built yet)'}`);
+  console.log(`[api] dashboard: ${fs.existsSync(PATHS.webDist) ? '/app' : '/app (not built yet)'} Â· guide widget: ${fs.existsSync(GUIDE_DIST) ? '/g/demo.html' : '/g (not built yet)'}`);
 
   let closing = false;
   const shutdown = async (signal: string): Promise<void> => {
     if (closing) return;
     closing = true;
-    console.log(`[api] ${signal} received — shutting down`);
+    console.log(`[api] ${signal} received â€” shutting down`);
     await stopWorker();
     await app.close();
     closeDb();
