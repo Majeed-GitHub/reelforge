@@ -56,6 +56,19 @@ export type ErrorCode = keyof typeof ERROR_CODES;
 // Job inputs / outputs
 // ---------------------------------------------------------------------------
 
+export const ASPECT_RATIOS = ['16:9', '9:16', '1:1', '4:5'] as const;
+/** 16:9 is the capture; the rest are reframed over a blurred background. */
+export type AspectRatio = (typeof ASPECT_RATIOS)[number];
+
+export type MusicOptions = {
+  /** Absolute path or a path relative to the data dir. */
+  path?: string;
+  /** 0–1, default 0.18 — music sits well under narration. */
+  gain?: number;
+  /** Lower the music while narration is speaking. Default true. */
+  duck?: boolean;
+};
+
 export type Target = {
   type: 'url' | 'tunnel';
   url: string;
@@ -80,6 +93,17 @@ export type DemoOptions = {
   voice?: string;
   /** Headless browser. Default true. */
   headless?: boolean;
+  /**
+   * Output framing. 16:9 is the native capture; the others reframe over a
+   * blurred copy of the frame (Screen Studio / Loom style) for social.
+   */
+  aspect?: AspectRatio;
+  /** Background music mixed under the narration, with optional auto-ducking. */
+  music?: MusicOptions;
+  /** CSS selectors whose content is masked before anything is written to disk. */
+  redactSelectors?: string[];
+  /** Mask password / card / SSN style inputs automatically. Default true. */
+  redactSensitive?: boolean;
 };
 
 export type DemoRequest = {
@@ -166,6 +190,12 @@ export type CaptureResult = {
   finalUrl: string;
   stoppedBefore?: string;
   error?: DemoFailure;
+  /**
+   * Boxes (viewport px) that must be masked in the render, each tied to the
+   * step that was on screen — so the blur only appears while that data is
+   * actually visible rather than for the whole video.
+   */
+  redactions?: Array<Box & { stepIndex: number }>;
   /** Raw agent log lines, surfaced in the dashboard for debugging. */
   log: string[];
 };
@@ -195,6 +225,12 @@ export type RenderOptions = {
   watermarkText?: string;
   /** Auto-zoom strength, 1.0 = off, 1.6 = default. */
   zoom?: number;
+  /** Output framing; defaults to the capture's 16:9. */
+  aspect?: AspectRatio;
+  /** Background music bed + ducking. */
+  music?: MusicOptions;
+  /** Regions to blur for sensitive data, each scoped to one step's time window. */
+  redactions?: Array<Box & { stepIndex: number }>;
 };
 
 export type RenderInput = {
