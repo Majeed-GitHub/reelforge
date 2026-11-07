@@ -21,6 +21,8 @@ export type RunOptions = {
   /** Cap on captured bytes per stream; extra output is discarded. */
   maxOutputBytes?: number;
   env?: NodeJS.ProcessEnv;
+  /** Text written to the child's stdin (then closed). Used by `text2wave`. */
+  input?: string;
 };
 
 export type RunResult = {
@@ -91,10 +93,25 @@ function findOnPath(base: string): string | null {
   const raw = process.env.PATH ?? process.env.Path ?? '';
   for (const entry of raw.split(path.delimiter)) {
     if (!entry) continue;
-    const candidate = path.join(entry, name);
+    const clean = entry.replace(/^"|"$/g, '');
+    const candidate = path.join(clean, name);
     if (isUsableBinary(candidate)) return candidate;
   }
   return null;
+}
+
+/**
+ * Locate an executable on PATH (platform aware: `.exe` on Windows).
+ * Returns the absolute path or null. Cheap and synchronous - used by the TTS
+ * provider probes, which must never throw.
+ */
+export function which(binary: string): string | null {
+  return findOnPath(binary);
+}
+
+/** True when an executable exists on PATH. */
+export function commandExists(binary: string): boolean {
+  return findOnPath(binary) !== null;
 }
 
 let ffmpegCache: string | null = null;
@@ -176,8 +193,16 @@ export function runBinary(bin: string, args: string[], opts: RunOptions = {}): P
       cwd: opts.cwd,
       env: opts.env ?? process.env,
       windowsHide: true,
-      stdio: ['ignore', 'pipe', 'pipe']
+      stdio: [opts.input !== undefined ? 'pipe' : 'ignore', 'pipe', 'pipe']
     });
+
+    if (opts.input !== undefined) {
+      try {
+        child.stdin?.end(opts.input, 'utf8');
+      } catch {
+        // the child may exit before reading stdin; the exit code tells the story
+      }
+    }
 
     const timer = setTimeout(() => {
       timedOut = true;

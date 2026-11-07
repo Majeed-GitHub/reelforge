@@ -2,21 +2,26 @@
  * Reelforge render stage.
  *
  *   raw Playwright .webm + StepRecord[]
- *     -> TTS narration clips (per step)
+ *     -> TTS narration clips (per step, cross-platform provider chain)
  *     -> auto-zoom keyframe timeline (eased, clamped)
- *     -> one ffmpeg pass: 2x upscale -> animated zoompan crop -> captions burn
- *        -> watermark -> narration muxed per line -> H.264/yuv420p/+faststart
+ *     -> time-scoped redaction blur (pre-camera, merged across contiguous steps)
+ *     -> one ffmpeg pass: 2x upscale -> animated zoompan crop -> aspect reframe
+ *        (blurred/darkened cover background) -> captions burn -> watermark
+ *        -> narration + optional music bed (sidechain-ducked) -> H.264/yuv420p/+faststart
  *     -> MP4 + SRT + poster PNG
  *
  * Degrades gracefully: no TTS provider (silent + captions), no steps (full
  * frame, no captions/zoom), missing/short capture video (plain background or
- * frozen last frame), no watermark font (warning, watermark skipped).
+ * frozen last frame), unreadable music (warning, no music), no watermark font
+ * (warning, watermark skipped).
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import type {
+  AspectRatio,
   Box,
   CaptureResult,
+  MusicOptions,
   NarrationLine,
   Point,
   RenderInput,
@@ -29,11 +34,17 @@ import { probeMedia, runFfmpeg, tailOutput, type MediaProbe } from './ffmpeg.ts'
 import { estimateSpeechDurationMs, sanitizeCaptionText, writeSrt } from './captions.ts';
 import { buildZoomTimeline, buildZoompanFilter, DEFAULT_ZOOM_STRENGTH, type Viewport } from './zoom.ts';
 import { isTtsProviderToken, synthesizeNarration, type TtsClip } from './tts.ts';
+import { buildReframeChains, isAspectRatio, resolveAspectLayout, type AspectLayout, DEFAULT_ASPECT } from './aspect.ts';
+import { buildRedactionChains, planRedactionWindows, type RedactionBox, type RedactionWindow } from './redactions.ts';
+import { duckFilter, musicFilter, resolveMusicBed, type MusicBed } from './music.ts';
 
 export * from './ffmpeg.ts';
 export * from './captions.ts';
 export * from './zoom.ts';
 export * from './tts.ts';
+export * from './aspect.ts';
+export * from './redactions.ts';
+export * from './music.ts';
 
 const DEFAULT_FPS = 30;
 const DEFAULT_SCALE_HEIGHT = 720;
@@ -53,6 +64,10 @@ type ResolvedRenderOptions = {
   language: string;
   voice?: string;
   zoom: number;
+  aspect: AspectRatio;
+  layout: AspectLayout;
+  music?: MusicOptions;
+  redactions: RedactionBox[];
 };
 
 function clamp(value: number, min: number, max: number): number {
@@ -74,7 +89,6 @@ function seconds(ms: number): string {
 
 function normalizeOptions(options: Partial<RenderOptions> | undefined): ResolvedRenderOptions {
   const scaleHeight = makeEven(clamp(finiteNumber(options?.scaleHeight, DEFAULT_SCALE_HEIGHT), 120, 2160));
-  const width = makeEven(Math.round((scaleHeight * 16) / 9));
   const fps = Math.round(clamp(finiteNumber(options?.fps, DEFAULT_FPS), 10, 60));
   const zoom = clamp(finiteNumber(options?.zoom, DEFAULT_ZOOM_STRENGTH), 1, 3);
   const voice = typeof options?.voice === 'string' && options.voice.trim() ? options.voice.trim() : undefined;
@@ -84,16 +98,25 @@ function normalizeOptions(options: Partial<RenderOptions> | undefined): Resolved
       : 'Reelforge';
   const language =
     typeof options?.language === 'string' && options.language.trim() ? options.language.trim() : DEFAULT_LANGUAGE;
+  const aspect = isAspectRatio(options?.aspect) ? options.aspect : DEFAULT_ASPECT;
+  const layout = resolveAspectLayout(aspect, scaleHeight);
+  const redactions = Array.isArray(options?.redactions)
+    ? (options.redactions as RedactionBox[]).filter((entry) => Boolean(entry) && Number.isFinite(entry.stepIndex))
+    : [];
   return {
     fps,
     scaleHeight,
-    width,
-    height: scaleHeight,
+    width: layout.width,
+    height: layout.height,
     watermark: options?.watermark !== false,
     watermarkText,
     language,
     voice,
-    zoom
+    zoom,
+    aspect,
+    layout,
+    music: options?.music,
+    redactions
   };
 }
 
@@ -244,20 +267,45 @@ type RenderAttempt = {
   clipInputs: { audioPath: string; startMs: number }[];
   durationMs: number;
   viewport: Viewport;
+  sourceSize: Viewport;
   zoomFilter: string;
   fps: number;
   width: number;
   height: number;
+  layout: AspectLayout;
+  redactionWindows: RedactionWindow[];
+  music?: { inputIndex: number; bed: MusicBed };
 };
 
-function buildFilterScript(attempt: RenderAttempt, variant: Variant, outDir: string): string {
-  const parts: string[] = [];
+function buildVideoChains(attempt: RenderAttempt, variant: Variant): string[] {
+  const chains: string[] = [];
+  let label = '0:v';
 
-  const videoParts: string[] = [attempt.zoomFilter];
-  if (attempt.padMs > 40) {
-    videoParts.push(`tpad=stop_mode=clone:stop_duration=${seconds(attempt.padMs)}`);
+  // Redaction blur first, in source/viewport space: the camera then pans and
+  // zooms the already-masked pixels, and social backgrounds never contain them.
+  const redactions = buildRedactionChains(attempt.redactionWindows, attempt.viewport, attempt.sourceSize, label);
+  if (redactions.chains.length > 0) {
+    chains.push(...redactions.chains);
+    label = redactions.outputLabel;
   }
 
+  chains.push(`[${label}]${attempt.zoomFilter}[cam]`);
+  let videoLabel = 'cam';
+
+  if (attempt.padMs > 40) {
+    // zoompan emits a non-monotonic/terminal PTS that makes tpad stop early;
+    // normalise the timeline first so the frozen tail actually appears.
+    chains.push(`[cam]setpts=N/(${attempt.fps}*TB)[camPts]`);
+    chains.push(`[camPts]tpad=stop_mode=clone:stop_duration=${seconds(attempt.padMs)}[camPad]`);
+    videoLabel = 'camPad';
+  }
+
+  if (!attempt.layout.native) {
+    chains.push(...buildReframeChains(attempt.layout, videoLabel));
+    videoLabel = 'framed';
+  }
+
+  const overlays: string[] = [];
   if (variant.subtitles && attempt.subtitlesPath) {
     const srtName = path.basename(attempt.subtitlesPath).replace(/\\/g, '/').replace(/:/g, '\\:');
     const fontDir = windowsFontsDir();
@@ -275,14 +323,14 @@ function buildFilterScript(attempt: RenderAttempt, variant: Variant, outDir: str
       'Alignment=2'
     ].join(',');
     const fontsDirPart = fontDir ? `:fontsdir='${escapeFilterPath(fontDir)}'` : '';
-    videoParts.push(`subtitles=filename='${srtName}'${fontsDirPart}:force_style='${style}'`);
+    overlays.push(`subtitles=filename='${srtName}'${fontsDirPart}:force_style='${style}'`);
   }
 
   if (variant.watermark && attempt.watermarkFont && attempt.watermarkTextPath) {
     const textName = path.basename(attempt.watermarkTextPath);
     const fontSize = Math.round(clamp(attempt.height * 0.036, 16, 84));
     const pad = Math.round(clamp(attempt.height * 0.03, 10, 120));
-    videoParts.push(
+    overlays.push(
       'drawtext=' +
         `fontfile='${escapeFilterPath(attempt.watermarkFont)}':` +
         `textfile='${textName}':` +
@@ -294,35 +342,62 @@ function buildFilterScript(attempt: RenderAttempt, variant: Variant, outDir: str
     );
   }
 
-  parts.push(`[0:v]${videoParts.join(',')}[vout]`);
+  // `null` keeps the graph shape stable (and is a no-op) when nothing is burned in.
+  chains.push(`[${videoLabel}]${overlays.length > 0 ? overlays.join(',') : 'null'}[vout]`);
+  return chains;
+}
 
-  const audioLines = attempt.clipInputs;
-  if (audioLines.length > 0) {
+function buildAudioChains(attempt: RenderAttempt): { chains: string[]; hasAudio: boolean } {
+  const chains: string[] = [];
+  const narrationLabel = 'nar';
+  const musicLabel = 'mus';
+  const trim = `apad,atrim=start=0:duration=${seconds(attempt.durationMs)},asetpts=PTS-STARTPTS[aout]`;
+
+  let hasNarration = false;
+  if (attempt.clipInputs.length > 0) {
+    hasNarration = true;
     const labels: string[] = [];
-    audioLines.forEach((clip, index) => {
+    attempt.clipInputs.forEach((clip, index) => {
       const inputIndex = index + 1;
       const label = `a${index}`;
       const delay = Math.max(0, Math.round(clip.startMs));
-      parts.push(
+      chains.push(
         `[${inputIndex}:a]aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo,` +
           `adelay=${delay}:all=1,volume=1.0[${label}]`
       );
       labels.push(`[${label}]`);
     });
-    const mixInputs = labels.join('');
-    if (audioLines.length === 1) {
-      parts.push(
-        `${mixInputs}apad,atrim=start=0:duration=${seconds(attempt.durationMs)},asetpts=PTS-STARTPTS[aout]`
-      );
-    } else {
-      parts.push(
-        `${mixInputs}amix=inputs=${audioLines.length}:duration=longest:normalize=0,` +
-          `apad,atrim=start=0:duration=${seconds(attempt.durationMs)},asetpts=PTS-STARTPTS[aout]`
-      );
-    }
+    if (labels.length === 1) chains.push(`${labels[0]}anull[${narrationLabel}]`);
+    else chains.push(`${labels.join('')}amix=inputs=${labels.length}:duration=longest:normalize=0[${narrationLabel}]`);
   }
 
-  return parts.join(';\n');
+  let hasMusic = false;
+  if (attempt.music) {
+    hasMusic = true;
+    chains.push(`[${attempt.music.inputIndex}:a]${musicFilter(attempt.music.bed)}[${musicLabel}]`);
+  }
+
+  if (hasNarration && hasMusic) {
+    if (attempt.music && attempt.music.bed.duck) {
+      chains.push(`[${narrationLabel}]asplit=2[narMix][duckKey]`);
+      chains.push(`[${musicLabel}][duckKey]${duckFilter()}[musDuck]`);
+      chains.push(`[narMix][musDuck]amix=inputs=2:duration=longest:normalize=0,${trim}`);
+    } else {
+      chains.push(`[${narrationLabel}][${musicLabel}]amix=inputs=2:duration=longest:normalize=0,${trim}`);
+    }
+  } else if (hasNarration) {
+    chains.push(`[${narrationLabel}]${trim}`);
+  } else if (hasMusic) {
+    chains.push(`[${musicLabel}]apad,atrim=start=0:duration=${seconds(attempt.durationMs)},asetpts=PTS-STARTPTS[aout]`);
+  }
+
+  return { chains, hasAudio: hasNarration || hasMusic };
+}
+
+function buildFilterScript(attempt: RenderAttempt, variant: Variant): { script: string; hasAudio: boolean } {
+  const video = buildVideoChains(attempt, variant);
+  const audio = buildAudioChains(attempt);
+  return { script: [...video, ...audio.chains].join(';\n'), hasAudio: audio.hasAudio };
 }
 
 async function probeOrNull(file: string, warnings: string[]): Promise<MediaProbe | null> {
@@ -420,6 +495,9 @@ export async function renderDemo(input: RenderInput): Promise<RenderResult> {
     );
   }
 
+  const sourceSize: Viewport = useLavfi
+    ? { width: viewport.width, height: viewport.height }
+    : { width: sourceProbe!.width || viewport.width, height: sourceProbe!.height || viewport.height };
   const sourceDurationMs = useLavfi ? 0 : sourceProbe!.durationMs;
   const stepEndMs = steps.reduce((max, step) => Math.max(max, step.endedAtMs), 0);
   const narrationEndMs = lines.reduce((max, line) => Math.max(max, line.startMs + line.durationMs), 0);
@@ -488,16 +566,26 @@ export async function renderDemo(input: RenderInput): Promise<RenderResult> {
     }
   }
 
-  // ---- 5. Zoom timeline + filter program -----------------------------------
+  // ---- 5. Redactions + music ------------------------------------------------
+  const allRedactions: RedactionBox[] = [
+    ...(Array.isArray(capture.redactions) ? (capture.redactions as RedactionBox[]) : []),
+    ...options.redactions
+  ];
+  const redactionWindows = allRedactions.length > 0
+    ? planRedactionWindows(allRedactions, steps, viewport, finalDurationMs, warnings)
+    : [];
+  const musicBed = await resolveMusicBed(options.music, warnings);
+
+  // ---- 6. Zoom camera + video filter program -------------------------------
   const keyframes = buildZoomTimeline(steps, viewport, { strength: zoomStrength });
   const zoomFilter = buildZoompanFilter(keyframes, viewport, {
-    outWidth: options.width,
-    outHeight: options.height,
+    outWidth: options.layout.camWidth,
+    outHeight: options.layout.camHeight,
     fps: options.fps,
     upscale: 2
   });
 
-  // ---- 6. Render ------------------------------------------------------------
+  // ---- 7. Render ------------------------------------------------------------
   const inputArgs: string[] = [];
   if (useLavfi) {
     inputArgs.push(
@@ -510,6 +598,7 @@ export async function renderDemo(input: RenderInput): Promise<RenderResult> {
     inputArgs.push('-i', capturedVideo);
   }
   for (const line of clipLinesWithAudio) inputArgs.push('-i', line.audioPath as string);
+  if (musicBed) inputArgs.push('-stream_loop', '-1', '-i', musicBed.path);
 
   const attempt: RenderAttempt = {
     padMs,
@@ -518,13 +607,18 @@ export async function renderDemo(input: RenderInput): Promise<RenderResult> {
     watermarkTextPath,
     clipInputs: clipLinesWithAudio.map((line) => ({ audioPath: line.audioPath as string, startMs: line.startMs })),
     durationMs: finalDurationMs,
-    zoomFilter,
     viewport,
+    sourceSize,
+    zoomFilter,
     fps: options.fps,
     width: options.width,
-    height: options.height
+    height: options.height,
+    layout: options.layout,
+    redactionWindows,
+    music: musicBed
+      ? { inputIndex: clipLinesWithAudio.length + 1, bed: musicBed }
+      : undefined
   };
-  const hasAudio = attempt.clipInputs.length > 0;
 
   const variants: Variant[] = [{ subtitles: Boolean(srtPath), watermark: Boolean(watermarkFont) }];
   if (srtPath) variants.push({ subtitles: false, watermark: Boolean(watermarkFont) });
@@ -535,10 +629,12 @@ export async function renderDemo(input: RenderInput): Promise<RenderResult> {
   const crf = process.env.REELFORGE_FFMPEG_CRF ?? '21';
   let lastFailure = '';
   let rendered = false;
+  let hasAudio = false;
 
   for (const [index, variant] of variants.entries()) {
-    const script = buildFilterScript(attempt, variant, outDir);
-    fs.writeFileSync(filterScriptPath, script, 'utf8');
+    const built = buildFilterScript(attempt, variant);
+    hasAudio = built.hasAudio;
+    fs.writeFileSync(filterScriptPath, built.script, 'utf8');
     const args = [
       '-hide_banner',
       '-loglevel',
@@ -588,7 +684,7 @@ export async function renderDemo(input: RenderInput): Promise<RenderResult> {
     throw new Error(`render: ffmpeg failed (${path.basename(outputPath)}): ${lastFailure}`);
   }
 
-  // ---- 7. Verify + poster ---------------------------------------------------
+  // ---- 8. Verify + poster ---------------------------------------------------
   const outputProbe = await probeMedia(outputPath).catch((err: Error) => {
     warnings.push(`render: could not probe the finished MP4 (${err.message})`);
     return null;
@@ -611,12 +707,13 @@ export async function renderDemo(input: RenderInput): Promise<RenderResult> {
     );
   }
   if (hasAudio && outputProbe && !outputProbe.hasAudio) {
-    warnings.push('render: narration audio was synthesized but the finished MP4 has no audio stream');
+    warnings.push('render: narration/music audio was synthesized but the finished MP4 has no audio stream');
   }
 
   const posterPath = await extractPoster(outputPath, path.join(outDir, 'poster.png'), durationMs, warnings);
 
   for (const key of ['render.filters.txt', 'watermark.txt']) {
+    if (process.env.REELFORGE_KEEP_FILTERS === '1') break;
     try {
       fs.rmSync(path.join(outDir, key), { force: true });
     } catch {

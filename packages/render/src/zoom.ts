@@ -234,6 +234,54 @@ export function zoomExpressionProgram(
 }
 
 /**
+ * Numerically evaluate the camera at a timestamp (same easeInOutCubic curve the
+ * ffmpeg expression program implements). Used for mapping redaction boxes into
+ * output pixels and by the self-test.
+ */
+export function cameraStateAt(
+  keyframes: ZoomKeyframe[],
+  tMs: number
+): { cx: number; cy: number; zoom: number } {
+  const frames = Array.isArray(keyframes) && keyframes.length > 0
+    ? keyframes
+    : [{ tMs: 0, cx: 0, cy: 0, zoom: 1 }];
+  if (tMs <= frames[0].tMs) return { cx: frames[0].cx, cy: frames[0].cy, zoom: frames[0].zoom };
+  for (let i = 0; i < frames.length - 1; i++) {
+    const a = frames[i];
+    const b = frames[i + 1];
+    if (tMs >= b.tMs) continue;
+    const dt = b.tMs - a.tMs;
+    const u = dt <= 0 ? 1 : (tMs - a.tMs) / dt;
+    const eased = u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
+    return {
+      cx: a.cx + (b.cx - a.cx) * eased,
+      cy: a.cy + (b.cy - a.cy) * eased,
+      zoom: a.zoom + (b.zoom - a.zoom) * eased
+    };
+  }
+  const last = frames[frames.length - 1];
+  return { cx: last.cx, cy: last.cy, zoom: last.zoom };
+}
+
+/**
+ * The camera crop rectangle in viewport coordinates at a timestamp (origin +
+ * size). Mirrors what `zoompan` does with the expression program.
+ */
+export function cameraCropRectAt(
+  keyframes: ZoomKeyframe[],
+  viewport: Viewport | undefined,
+  tMs: number
+): { x: number; y: number; width: number; height: number; zoom: number } {
+  const vp = clampViewport(viewport);
+  const state = cameraStateAt(keyframes, tMs);
+  const zoom = clamp(state.zoom, MIN_ZOOM, MAX_ZOOM);
+  const width = vp.width / zoom;
+  const height = vp.height / zoom;
+  const { cx, cy } = clampCenter(state.cx, state.cy, zoom, vp);
+  return { x: cx - width / 2, y: cy - height / 2, width, height, zoom };
+}
+
+/**
  * Full video filter prefix: 2x upscale (keeps crops sharp), animated zoompan
  * crop, then setsar. The zoompan output is already at the target size.
  */

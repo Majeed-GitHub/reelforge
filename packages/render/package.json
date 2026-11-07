@@ -1,15 +1,20 @@
 {
   "name": "@reelforge/render",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
-  "description": "Reelforge render stage: raw Playwright .webm + StepRecord[] -> narrated, auto-zoomed, captioned MP4.",
+  "description": "Reelforge render stage: raw Playwright .webm + StepRecord[] -> narrated, auto-zoomed, captioned MP4 (cross-platform TTS, social aspects, music bed, time-scoped redactions).",
   "main": "src/index.ts",
   "exports": {
     ".": "./src/index.ts",
     "./tts": "./src/tts.ts",
     "./captions": "./src/captions.ts",
     "./zoom": "./src/zoom.ts",
-    "./ffmpeg": "./src/ffmpeg.ts"
+    "./ffmpeg": "./src/ffmpeg.ts",
+    "./aspect": "./src/aspect.ts",
+    "./redactions": "./src/redactions.ts",
+    "./music": "./src/music.ts",
+    "./gif": "./src/gif.ts",
+    "./vtt": "./src/vtt.ts"
   }
 }
