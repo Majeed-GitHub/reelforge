@@ -1,136 +1,208 @@
 # Reelforge
 
-**Give it a URL and one sentence. It drives your product in a real browser and publishes a narrated demo video, a help-centre article, an internal training doc and an in-app guide — all from one Product Graph.**
+**Give it a URL and one sentence. It drives your product in a real browser, records it, and publishes a narrated demo video, a help-centre article, an internal training doc and an in-app guide — all from one Product Graph.**
 
-Reelforge is a self-hosted, open reimplementation of [Screenforge Director](https://director.screenforge.co),
-built by reverse-engineering the public product: its documented REST/MCP surface, its
-published CLI (`@screenforge/director-cli`), and its observable behaviour. See
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for exactly what was recovered and how.
+An open-source, self-hosted alternative to commercial demo agents ([Screenforge Director](https://director.screenforge.co) is the one it was reverse-engineered from — see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)). **Bring your own model key, or run it completely offline.** No account, no per-seat pricing, no vendor holding your screen recordings.
+
+[![CI](https://github.com/YOUR_GITHUB_USER/reelforge/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR_GITHUB_USER/reelforge/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-FF5C38.svg)](LICENSE)
+[![Node](https://img.shields.io/badge/node-%E2%89%A522.6-3ddc97.svg)](package.json)
+[![Docker](https://img.shields.io/badge/docker-ghcr.io-79a7ff.svg)](docs/DEPLOY.md)
+[![MCP](https://img.shields.io/badge/MCP-39%2B%20tools-8b5cf6.svg)](docs/MCP.md)
+
+![A demo recorded and rendered by Reelforge](docs/images/demo-poster.png)
+
+---
+
+## Try it in 60 seconds
+
+```bash
+git clone https://github.com/YOUR_GITHUB_USER/reelforge.git && cd reelforge
+npm install
+npx playwright install chromium     # once, ~130 MB
+npm run seed                        # creates a workspace, prints an rg_… key
+npm run dev
+```
+
+| | |
+|---|---|
+| Dashboard | <http://127.0.0.1:4401> — paste the key from `npm run seed` |
+| Demo product | <http://127.0.0.1:4402> — "Northwind", a little SaaS to record |
+| API + MCP | <http://127.0.0.1:4400/api> |
+
+Then put in an instruction like *"Sign in, create a project called Q4 Launch, invite
+sam@example.com, then upgrade to the Team plan"* and watch it work through the
+product, narrate, and publish.
+
+Or with Docker:
+
+```bash
+docker run --rm -p 4400:4400 -v reelforge-data:/data ghcr.io/YOUR_GITHUB_USER/reelforge:latest
+```
+
+No model key is required for either — see [Run fully local](#run-fully-local).
+
+## How it works
 
 ```
 URL + one sentence
       │
       ▼
- real Chromium  ──►  recorded run  ──►  narrated MP4 (auto-zoom, cursor, captions)
+ real Chromium  ──►  recorded run  ──►  narrated MP4 (auto-zoom · eased cursor · captions)
       │                    │
       │                    └────────►  Product Graph (screens · flows · controls)
       │                                        │
       │                                        ├─►  Help-centre article
       │                                        ├─►  Internal training doc
-      │                                        └─►  In-app guide (embed script)
+      │                                        ├─►  In-app guide (one <script> tag)
+      │                                        └─►  GIF preview · share page · webhook
       ▼
  REST API + MCP server, so your coding agent can do all of it too
 ```
 
-## Quickstart
-
-```bash
-npm install
-npx playwright install chromium     # once
-npm run seed                        # creates the workspace + an rg_… API key
-npm run dev                         # demo product :4402 · API+worker :4400 · dashboard :4401
-```
-
-Open <http://127.0.0.1:4401>, paste the key printed by `npm run seed`, and record a demo
-of the bundled test product (Northwind) at <http://127.0.0.1:4402>.
-
-Then prove the whole pipeline works end to end:
-
-```bash
-npm run smoke
-```
-
-## What it does
-
-| Stage | What happens |
+| Stage | What actually happens |
 |---|---|
-| **Plan** | The instruction is turned into browser actions. Uses any OpenAI-compatible model when configured; otherwise an offline scripted planner that understands sign-in, navigation, create/invite/upgrade style flows. |
-| **Drive** | Playwright Chromium opens the product, signs in if needed, and acts. A cursor and click ripples are injected *into the page* so the recording already contains them. |
-| **Capture** | Every step records timing (ms), the target element's box, selector, accessible name, a screenshot and a narration line. |
-| **Render** | One ffmpeg pass: eased auto-zoom onto the action, burned captions, watermark, and a synthesised voiceover timed to the steps. |
-| **Index** | The run is filed into the Product Graph: one flow per route (deduplicated by signature), screens, and the controls each step used. |
-| **Publish** | Video + help article + internal training doc + in-app guide are all views of that one flow. Re-checking a flow flags it stale when the product drifts. |
+| **Plan** | Your instruction becomes browser actions. Any OpenAI-compatible model, or the offline scripted planner. |
+| **Drive** | Playwright opens the product, signs in if needed, and acts. The cursor and click ripples are injected *into the page*, so they are already in the recording — no compositing pass. |
+| **Capture** | Every step records timing, element box, selector, accessible name, a screenshot and a narration line. |
+| **Render** | One ffmpeg pass: eased auto-zoom onto each action, burned captions, watermark, and a voiceover timed to the steps. |
+| **Index** | The run is filed into the Product Graph — one flow per route, deduplicated by signature, with the controls each step used. |
+| **Publish** | Video, article, training doc, guide, GIF and share page are all views of that one flow. Re-check a flow and it flags drift. |
 
-## Everything in the box
+## Bring your own key
 
-- **REST API** at `/api` mirroring Director's contract (envelope, error codes, polling model).
-- **MCP server** at `POST /api/mcp` (streamable HTTP) with 20+ tools — works in Claude Code, Cursor, Claude Desktop.
-- **Dashboard** — demos, live status, video player, transcript, Product Graph, articles, guides, environments, API keys.
-- **Embeddable guide** — one `<script>` tag, no dependencies, no CSS leakage (shadow DOM).
-- **Product Graph** — flows deduplicated by signature, staleness detection on re-check.
-- **Offline-first** — no API keys required: Windows SAPI narration + scripted planner. Add a key and it upgrades in place.
+The planner is a single `/chat/completions` call, so it works with almost anything.
+Set it with env vars or paste a key in **Settings → Model provider**.
 
-## Configure
-
-Everything is optional; copy `.env.example` to `.env`. The important knobs:
-
-| Variable | Default | Purpose |
-|---|---|---|
-| `REELFORGE_LLM_BASE_URL` / `_API_KEY` / `_MODEL` | unset | Any OpenAI-compatible endpoint for the planner and narration. |
-| `REELFORGE_TTS_PROVIDER` | `auto` | `auto` → openai → edge-tts → Windows SAPI → silent. |
-| `REELFORGE_TTS_VOICE` | system default | Voice name for the narration. |
-| `REELFORGE_DATA_DIR` | `./data` | Database, videos, screenshots, audio. |
-| `REELFORGE_BLOCK_LOCAL` | `false` | Set `true` to reject loopback targets like Director does. |
-| `REELFORGE_ENFORCE_CREDITS` | `false` | Turn on per-minute credit metering (1 credit = 1 finished minute, 15 s minimum). |
-
-## Use it from an agent
+| Provider | `REELFORGE_LLM_PROVIDER` | Key env | Notes |
+|---|---|---|---|
+| **GMI Cloud** | `gmi` | `GMI_API_KEY` | `https://api.gmi-serving.com/v1` — model ids from your console |
+| OpenAI | `openai` | `OPENAI_API_KEY` | `gpt-4.1-mini` default |
+| OpenRouter | `openrouter` | `OPENROUTER_API_KEY` | one key, most frontier models |
+| Groq | `groq` | `GROQ_API_KEY` | very fast |
+| Together | `together` | `TOGETHER_API_KEY` | |
+| Fireworks | `fireworks` | `FIREWORKS_API_KEY` | |
+| DeepSeek | `deepseek` | `DEEPSEEK_API_KEY` | |
+| Ollama | `ollama` | — | local, no key |
+| LM Studio | `lmstudio` | — | local, no key |
+| Custom | `custom` | `REELFORGE_LLM_API_KEY` | any `/chat/completions` gateway |
 
 ```bash
-# REST
-curl -s -X POST http://127.0.0.1:4400/api/demos \
-  -H "X-API-Key: $REELFORGE_API_KEY" -H "Content-Type: application/json" \
+# example: GMI Cloud
+export REELFORGE_LLM_PROVIDER=gmi
+export GMI_API_KEY=...
+export REELFORGE_LLM_MODEL=vendor/model-name
+npm run api
+```
+
+Keys pasted in the dashboard are stored **AES-256-GCM encrypted**, scoped to the
+workspace, and never returned by the API — only a masked hint (`sk-…4f2a`). Model
+lists are discovered live from the provider. Full matrix and troubleshooting:
+[docs/PROVIDERS.md](docs/PROVIDERS.md).
+
+### Run fully local
+
+No key, no network, no cost:
+
+```bash
+export REELFORGE_LLM_PROVIDER=none     # offline scripted planner
+export REELFORGE_TTS_PROVIDER=sapi     # Windows SAPI narration (or `edge` for neural voices)
+```
+
+The scripted planner understands sign-in, navigation, create, invite and upgrade
+flows and narrates them. It is the default with no configuration, which is why the
+smoke test and CI never need credentials.
+
+## What's in the box
+
+| Component | What it does |
+|---|---|
+| **REST API** | 40+ endpoints mirroring Director's contract: `{message,data}` / `{code,message,remediation}`, polling job model, 7 documented error codes with `remediation.action`. |
+| **MCP server** | Streamable HTTP at `POST /api/mcp` *and* a stdio bridge for Claude Desktop. 39+ tools, resources, prompts. |
+| **Dashboard** | React: live progress, video player, transcript, Product Graph, articles, guides, environments, BYOK providers, webhooks. |
+| **In-app guide** | 3.9 KB gzip embeddable widget, shadow-DOM isolated, skips steps whose target moved and reports them. |
+| **Product Graph** | Flows deduplicated by signature, screens, controls, staleness detection on re-check. |
+| **Outputs** | MP4, SRT/VTT captions, GIF preview, public share page, HMAC-signed webhooks (Slack-compatible). |
+| **CLI** | `reelforge session` (capture an SSO/2FA sign-in without sharing the password), `mcp`, `init`, `doctor`. |
+| **Metering** | Director-parity credits (1 credit = 1 finished minute, 15 s minimum), off by default when self-hosted. |
+
+![Dashboard](docs/images/dashboard-demos.png)
+
+## Talk to it from an agent
+
+```bash
+# Claude Code, over HTTP
+claude mcp add --transport http reelforge http://127.0.0.1:4400/api/mcp \
+  --header "X-API-Key: rg_…"
+
+# Claude Desktop, over stdio
+node packages/cli/src/mcp-stdio.ts --stdio --api-key rg_…
+```
+
+Then just ask: *"Record a demo of signing up on http://127.0.0.1:4402 and publish a
+help article from it."* See [docs/MCP.md](docs/MCP.md) for every tool.
+
+Plain REST works too:
+
+```bash
+curl -X POST http://127.0.0.1:4400/api/demos \
+  -H "X-API-Key: $REELFORGE_API_KEY" -H 'content-type: application/json' \
   -d '{"target":{"type":"url","url":"https://app.example.com"},
        "instruction":"Create a project, then invite a teammate.",
        "authorized":true,"options":{"language":"en"}}'
-# -> { "data": { "id": "dem_…", "status": "queued", "pollAfterSeconds": 3 } }
+# → { "data": { "id": "dem_…", "status": "queued", "pollAfterSeconds": 3 } }
 ```
 
-```bash
-# MCP (Claude Code)
-claude mcp add --transport http reelforge http://127.0.0.1:4400/api/mcp --header "X-API-Key: rg_…"
-```
+## Verified, not promised
 
-## Repository map
-
-```
-packages/core     domain contract, SQLite schema, credits, flow signatures, article templates
-packages/agent    Playwright runner, injected cursor, observer, LLM + scripted planners, re-check
-packages/render   TTS, captions, auto-zoom timeline, single-pass ffmpeg render
-packages/api      Fastify REST surface, MCP server, in-process worker, Product Graph
-packages/web      React dashboard (Vite)
-packages/guide    embeddable in-app guide widget (esbuild, <6 KB gzip)
-packages/cli      reelforge session | mcp | init | doctor  (Director CLI parity)
-apps/demo-site    a real little SaaS to record demos of
-scripts/          dev runner, seeding, smoke test, contact-sheet preview
-docs/             ARCHITECTURE.md (reverse-engineering notes), API.md, VERIFICATION.md
-```
-
-## Verify
-
-```bash
-npm run typecheck    # whole monorepo, zero errors
-npm run smoke        # records a demo, renders it, checks graph + article + guide
-```
-
-`npm run smoke` boots the demo product and the API, records a real 11-step demo,
-renders it with narration and captions, then asserts 23 things about the result — exit 0
-when all pass. Full evidence, including the step table, artifact sizes and the honest
-limitation list: **[docs/VERIFICATION.md](docs/VERIFICATION.md)**.
-
-Verified on this machine (Windows 11, Node 25.8.1, no API keys at all):
+`npm run smoke` records a real 11-step demo and asserts **23 things** about it —
+video bytes, dimensions, duration, transcript, graph flow, article body, guide
+embeddability. On Windows 11 / Node 25.8 with **zero API keys**:
 
 | | |
 |---|---|
-| Finished video | `data/videos/dem_e4wqphjy.mp4` — 862 479 B, h264 1280×720 + AAC, 32.5 s |
-| Steps captured | 11, each with viewport box, click point, selector, screenshot, narration |
-| Product Graph | 1 flow, signature `617d4a55e9fa0a75`, 6 screens |
-| Help article | 3 159 chars, 11 sections, signed screenshots |
-| In-app guide | 10 resolvable steps, public embed key |
+| Finished video | 862 KB, h264 1280×720 + AAC, 32.5 s, auto-zoom + captions |
+| Steps | 11, each with box, click point, selector, screenshot, narration |
+| Product Graph | 1 flow (`617d4a55e9fa0a75`), 6 screens |
+| Article | 3 159 chars, 11 sections, signed screenshots |
+| Guide | 10 resolvable steps, public embed key |
 | Billed | 0.542 credits (32.549 s at 1 credit/minute) |
-| Smoke | **23/23** |
 
-## Licence
+Full log, including the honest limitation list: [docs/VERIFICATION.md](docs/VERIFICATION.md).
 
-MIT. The design is reverse-engineered for interoperability; no Screenforge code is
-included — the API shape, error codes and CLI behaviour were reimplemented from public
-documentation and the published npm client.
+## Compared to Director
+
+Same shape, different trade-offs — [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) documents exactly what was reverse-engineered and what was rebuilt from first principles.
+
+| Director | Reelforge |
+|---|---|
+| Hosted SaaS, per-minute credits | Self-hosted, MIT, credits modelled but optional |
+| Proprietary planner | Any OpenAI-compatible model, or fully offline |
+| Cloud TTS | Offline SAPI / edge-tts fallback, no key needed |
+| Cloud workers | Your machine; tunnels for local dev servers |
+
+**What it does not do:** interactive click-through demos (use Supademo/Walnut/HowdyGo
+for that), avatar videos, or passkey replay (origin+device bound — impossible for
+any recorder).
+
+## Docs
+
+| | |
+|---|---|
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | What was reverse-engineered, and how it is built |
+| [VERIFICATION.md](docs/VERIFICATION.md) | Every check, every number, and the honest gaps |
+| [API.md](docs/API.md) | REST surface, error codes, MCP tools |
+| [PROVIDERS.md](docs/PROVIDERS.md) | BYOK matrix, local Ollama, key handling |
+| [MCP.md](docs/MCP.md) | Agent setup for Claude Code / Desktop / Cursor |
+| [OUTPUTS.md](docs/OUTPUTS.md) | Webhooks, share pages, GIF, captions |
+| [DEPLOY.md](docs/DEPLOY.md) | Docker, bare metal, reverse proxy, backups |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Dev setup and PR rules |
+
+## Credits
+
+Built by **Shaik Majeed**, developed with the **[DeepSeek Harness](https://github.com/deepseek-ai)**
+using the **GMI Cloud API**. The API shape, error codes and CLI behaviour were
+reimplemented for interoperability from public documentation and the published
+`@screenforge/director-cli` npm package; no Screenforge code is included.
+
+MIT licensed — use it, fork it, sell demos made with it.

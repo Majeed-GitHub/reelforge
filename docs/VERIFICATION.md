@@ -134,3 +134,64 @@ Also exercised by the team, with the documented envelopes: `401 UNAUTHORIZED`,
 6. **Zendesk sync** is an adapter stub: endpoint shape matches, external call does not exist.
 7. **Credits are modelled but not enforced** by default (`REELFORGE_ENFORCE_CREDITS=false`),
    because a self-hosted install shouldn't be blocked by its own billing.
+
+---
+
+# v0.2.0 verification
+
+Same machine, same rule: every number is from a real run.
+
+## End-to-end, after BYOK + outputs landed
+
+```
+node scripts/smoke.ts  →  23/23 checks passed, exit 0
+  demo        data/videos/dem_4jjm21q7.mp4  (824 118 B, 11 steps)
+  graph       "Sign in then create project"
+  article     3 159 chars   guide 10 embeddable steps
+```
+
+The worker now also fires `demo.complete` webhooks and refreshes the Product Graph
+in the same pass, so this run exercises the v0.2 completion path too.
+
+## Bring your own key
+
+| Check | Result |
+|---|---|
+| `node packages/providers/test/providers-selftest.ts` | **48 checks PASS**, exit 0 — env > workspace > none precedence; AES-256-GCM round trip; no plaintext in any API body (only `sk-…1234` hints); typed `PROVIDER_UNAUTHORIZED` / `PROVIDER_NOT_FOUND` / `PROVIDER_UNREACHABLE` / `PROVIDER_TIMEOUT` instead of throws; model discovery parses both OpenAI `{data:[{id}]}` and Ollama `{models:[{name}]}` |
+| Live API, nothing configured | `GET /api/providers` → `llm.active.source: "none"`, `tts.active.providerId: "sapi"`, 10 LLM providers, 5 TTS providers |
+| Live API, no Ollama running | `GET /api/providers/models?provider=ollama` → 200 `{models: [], source: "default"}` (graceful); `POST /api/providers/test` → 200 `ok:false, error:"Could not reach the provider: fetch failed"` — never a 500 |
+| Planner regression | `node packages/agent/scripts/verify-guards.ts` → GUARDS PASS, exit 0 |
+
+## Outputs
+
+Live harness on `:4412` with a stub receiver on `:9099` — **53 checks passed, 0 failed**:
+
+- webhook receiver saw `[500, 200]` → retry proven; signature re-verified as HMAC of the raw body; Slack body shape asserted
+- share link → page with **no** API key, `<video>` served 862 479 bytes of real MP4; invalid token → 404 HTML page
+- GIF: 720×404, 42 frames @12 fps = 3 500 ms, 499 869 B, `GIF8` trailer present
+- VTT: `WEBVTT`, 11 cues mirroring the SRT (`00:00:02.050 --> 00:00:04.129`)
+- unsupported export kind → 501 envelope, not a crash
+
+## Dashboard
+
+| Suite | Result |
+|---|---|
+| `node packages/web/test/dashboard-smoke.mjs` (v0.1 screens) | **22/22** — still green after the v0.2 changes |
+| `node packages/web/test/v02-smoke.mjs` (new surfaces) | **18/18** — 10 provider tiles, offline state named, key field, model discovery, latency from test-connection, provider+key POST body, webhook save/test, share/GIF/captions actions, onboarding two-path, zero page errors |
+| `node packages/guide/test/widget-smoke.mjs` | **12/12** |
+| `npx vite build` | 386.84 kB JS / 24.45 kB CSS (115.76 / 5.92 gzip) |
+
+## Typecheck
+
+```
+npx tsc -p tsconfig.json --noEmit   → exit 0 (core, agent, render, api, cli, providers, scripts)
+```
+
+## Still true from v0.1
+
+The eleven-step capture table, the 0.542-credit billing, and the honest limitation
+list above. New in v0.2: keys are encrypted at rest and never echoed; the worker
+resolves the workspace override when exactly one workspace exists (multi-tenant
+BYOK would need the workspace id threaded through the worker — documented in
+docs/PROVIDERS.md); narration voice selection is wired but TTS keys remain
+environment-only.
