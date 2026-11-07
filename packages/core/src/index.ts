@@ -1,4 +1,5 @@
 export * from './types.ts';
+export * from './providers.ts';
 export * from './config.ts';
 export * from './ids.ts';
 export * from './db.ts';

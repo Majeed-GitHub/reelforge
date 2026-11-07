@@ -431,3 +431,12 @@ export type LoginCodeRow = {
   expires_at: string;
   used_at: string | null;
 };
+
+/** Per-workspace config bag (BYOK provider + key, webhook, branding…). */
+export type WorkspaceSettingRow = {
+  workspace_id: string;
+  key: string;
+  /** JSON-encoded value. Secrets are encrypted before they reach this column. */
+  value_json: string;
+  updated_at: string;
+};

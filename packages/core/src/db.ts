@@ -191,6 +191,17 @@ CREATE TABLE IF NOT EXISTS questions_answers (
   option_id TEXT NOT NULL,
   answered_at TEXT NOT NULL
 );
+
+-- Per-workspace configuration: BYOK provider choice + keys (encrypted by the
+-- caller before insert), webhook target, branding. Keyed by name so new
+-- settings never need a migration.
+CREATE TABLE IF NOT EXISTS workspace_settings (
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  key TEXT NOT NULL,
+  value_json TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (workspace_id, key)
+);
 `;
 
 export function getDb(): DatabaseSync {
