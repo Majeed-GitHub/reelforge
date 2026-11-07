@@ -18,7 +18,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { PATHS, ROOT } from '../../core/src/config.ts';
 import type { CaptureResult, StepRecord } from '../../core/src/types.ts';
-import { ffmpegPath, ffprobePath, probeMedia, runFfmpeg, runFfprobe, tailOutput } from '../src/ffmpeg.ts';
+import { ffmpegPath, ffprobePath, probeMedia, runFfmpeg, runFfprobe, tailOutput , hasFilter } from '../src/ffmpeg.ts';
 import { renderDemo } from '../src/index.ts';
 import { describeTtsProviders, resolveTtsProvider } from '../src/tts.ts';
 import { resolveAspectLayout } from '../src/aspect.ts';
@@ -337,14 +337,21 @@ async function main(): Promise<void> {
   );
   check('video stream present (h264)', probe.hasVideo && probe.videoCodec === 'h264', `codec=${probe.videoCodec}`);
 
-  // CI once caught captions and the watermark silently falling back on Linux
-  // because the runner had no usable font. A silent fallback is a bug, not a
-  // graceful degradation, so it is now a check of its own.
-  const filterFallbacks = result.warnings.filter((w) => /caption burn failed|watermark failed/i.test(w));
+  // A build that lacks a filter is a fact to report, not a failure. A build
+  // that *has* the filter and falls back is a bug — that is exactly what CI
+  // caught on Linux, where captions silently disappeared for a release.
+  const caps = { captions: hasFilter('subtitles') || hasFilter('ass'), watermark: hasFilter('drawtext') };
+  const captionFallbacks = result.warnings.filter((w) => /caption burn failed/i.test(w));
+  const watermarkFallbacks = result.warnings.filter((w) => /watermark failed/i.test(w));
   check(
-    'no filter fallback (captions + watermark burned)',
-    filterFallbacks.length === 0,
-    filterFallbacks.length ? filterFallbacks.join(' | ') : 'both filters applied'
+    caps.captions ? 'captions burned (build has libass)' : 'captions reported unavailable (build lacks libass)',
+    caps.captions ? captionFallbacks.length === 0 : result.warnings.some((w) => /no libass/.test(w)),
+    captionFallbacks.join(' | ') || result.warnings.filter((w) => /libass/.test(w)).join(' | ')
+  );
+  check(
+    caps.watermark ? 'watermark drawn (build has drawtext)' : 'watermark reported unavailable (build lacks drawtext)',
+    caps.watermark ? watermarkFallbacks.length === 0 : result.warnings.some((w) => /no drawtext/.test(w)),
+    watermarkFallbacks.join(' | ') || result.warnings.filter((w) => /drawtext/.test(w)).join(' | ')
   );
 
   // The renderer tells us how long it intends the video to be; assert the file

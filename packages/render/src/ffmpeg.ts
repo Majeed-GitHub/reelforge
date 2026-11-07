@@ -5,7 +5,7 @@
  * `ffmpeg-static` / `ffprobe-static` npm packages, a `node_modules` walk-up,
  * and finally PATH. Nothing is ever installed at runtime.
  */
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -344,4 +344,32 @@ export async function probeMedia(file: string): Promise<MediaProbe> {
 /** Resolve both binaries or throw a single descriptive error. */
 export function requireMediaTools(): { ffmpeg: string; ffprobe: string } {
   return { ffmpeg: ffmpegPath(), ffprobe: ffprobePath() };
+}
+
+/**
+ * Which optional filters does *this* ffmpeg build actually have?
+ *
+ * The bundled binaries differ by platform: the Linux static build ships libass
+ * (subtitles/ass) but not drawtext, while the Windows build has both. Asking
+ * once and caching means the renderer degrades deliberately — "this build
+ * cannot burn a watermark" — instead of attempting a filter that does not
+ * exist and reporting a failure.
+ */
+let filterCapabilitiesCache: Set<string> | null = null;
+
+export function filterCapabilities(): Set<string> {
+  if (filterCapabilitiesCache) return filterCapabilitiesCache;
+  const result = spawnSync(ffmpegPath(), ['-hide_banner', '-filters'], { encoding: 'utf8', timeout: 15_000 });
+  const names = new Set<string>();
+  for (const line of (result.stdout ?? '').split('\n')) {
+    // Filter listing format: " ..C drawtext          V->V       Draw text ..."
+    const match = /^\s*[.A-Z|]{2,4}\s+([a-z0-9_]+)\s+[VA]/.exec(line);
+    if (match) names.add(match[1]);
+  }
+  filterCapabilitiesCache = names;
+  return names;
+}
+
+export function hasFilter(name: string): boolean {
+  return filterCapabilities().has(name);
 }

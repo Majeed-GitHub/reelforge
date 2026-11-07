@@ -30,7 +30,7 @@ import type {
   StepRecord
 } from '../../core/src/types.ts';
 import { PATHS, VIEWPORT } from '../../core/src/config.ts';
-import { probeMedia, runFfmpeg, tailOutput, type MediaProbe } from './ffmpeg.ts';
+import { probeMedia, runFfmpeg, tailOutput, type MediaProbe, hasFilter } from './ffmpeg.ts';
 import { estimateSpeechDurationMs, sanitizeCaptionText, writeSrt } from './captions.ts';
 import { buildZoomTimeline, buildZoompanFilter, DEFAULT_ZOOM_STRENGTH, type Viewport } from './zoom.ts';
 import { isTtsProviderToken, synthesizeNarration, type TtsClip } from './tts.ts';
@@ -657,14 +657,30 @@ export async function renderDemo(input: RenderInput): Promise<RenderResult> {
       : undefined
   };
 
-  const variants: Variant[] = [{ subtitles: Boolean(srtPath), watermark: Boolean(watermarkFont) }];
-  if (srtPath) variants.push({ subtitles: false, watermark: Boolean(watermarkFont) });
-  if (watermarkFont) variants.push({ subtitles: false, watermark: false });
+  // Ask the build what it can do before planning the graph. Silently retrying
+  // without captions hid a real defect on Linux CI for a whole release.
+  const caps = {
+    captions: hasFilter('subtitles') || hasFilter('ass'),
+    watermark: hasFilter('drawtext')
+  };
+  const wantCaptions = Boolean(srtPath) && caps.captions;
+  const wantWatermark = Boolean(watermarkFont) && caps.watermark;
+  if (srtPath && !caps.captions) {
+    warnings.push('render: this ffmpeg build has no libass, so captions are exported as SRT/VTT but not burned in');
+  }
+  if (watermarkFont && !caps.watermark) {
+    warnings.push('render: this ffmpeg build has no drawtext filter, so the watermark is skipped');
+  }
+
+  const variants: Variant[] = [{ subtitles: wantCaptions, watermark: wantWatermark }];
+  if (wantCaptions) variants.push({ subtitles: false, watermark: wantWatermark });
+  if (wantWatermark) variants.push({ subtitles: false, watermark: false });
 
   const filterScriptPath = path.join(outDir, 'render.filters.txt');
   const preset = process.env.REELFORGE_FFMPEG_PRESET ?? 'veryfast';
   const crf = process.env.REELFORGE_FFMPEG_CRF ?? '21';
   let lastFailure = '';
+  const lastFailureByVariant: string[] = [];
   let rendered = false;
   let hasAudio = false;
 
@@ -704,13 +720,21 @@ export async function renderDemo(input: RenderInput): Promise<RenderResult> {
     const res = await runFfmpeg(args, { cwd: outDir, timeoutMs: RENDER_TIMEOUT_MS });
     if (res.code === 0 && fs.existsSync(outputPath) && fs.statSync(outputPath).size > 0) {
       if (index > 0) {
-        if (!variant.subtitles && srtPath) warnings.push('render: caption burn failed; retried without burned-in captions');
-        if (!variant.watermark) warnings.push('render: watermark failed; retried without the watermark');
+        if (!variant.subtitles && srtPath) {
+          warnings.push(
+            'render: caption burn failed; retried without burned-in captions' +
+              (lastFailureByVariant.length ? ` (${lastFailureByVariant[0]})` : '')
+          );
+        }
+        if (!variant.watermark) {
+          warnings.push('render: watermark failed; retried without the watermark' + (lastFailureByVariant.length ? ` (${lastFailureByVariant.join(' | ')})` : ''));
+        }
       }
       rendered = true;
       break;
     }
     lastFailure = tailOutput(res.stderr, 4000) || `ffmpeg exited with code ${res.code}`;
+    lastFailureByVariant.push(`subtitles=${variant.subtitles} watermark=${variant.watermark}: ${lastFailure.split('\n').slice(-2).join(' ').slice(0, 260)}`);
     if (res.timedOut) {
       lastFailure = `ffmpeg timed out after ${Math.round(RENDER_TIMEOUT_MS / 1000)}s`;
       break;
